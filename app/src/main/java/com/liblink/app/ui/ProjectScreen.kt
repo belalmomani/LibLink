@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.liblink.app.R
 import com.liblink.app.data.Project
+import com.liblink.app.data.LibraryRepository
 import com.liblink.app.data.ProjectRepository
 import com.liblink.app.git.GitManager
 import com.liblink.app.storage.ProjectStorage
@@ -117,6 +118,14 @@ fun ProjectScreen(
             "FETCH_FAILED" -> R.string.repair_fetch_failed
             else -> R.string.repair_init
         })
+    }
+
+    // حفظ مستودع المشروع في المكتبة الشخصية للرجوع إليه بسرعة
+    fun saveToLibrary() {
+        if (remote.isBlank()) { log = ctx.getString(R.string.no_remote); return }
+        val lib = LibraryRepository(ctx)
+        log = if (lib.exists(remote.trim())) ctx.getString(R.string.lib_exists)
+        else { lib.add(project.name, remote.trim(), "other", ""); ctx.getString(R.string.lib_saved) }
     }
 
     fun doStage() = op { gm -> gm.stageAll(dir); ctx.getString(R.string.staged_ok) + "\n" + statusText(gm) }
@@ -236,6 +245,7 @@ fun ProjectScreen(
                         MenuItem(R.string.m_cherry, R.string.h_cherry) { dlg = Dlg.CherryPick }
                         MenuItem(R.string.m_branches, R.string.h_branches) { onBranches() }
                         MenuItem(R.string.m_build_apk, R.string.h_build_apk) { onBuild() }
+                        MenuItem(R.string.m_save_lib, R.string.h_save_lib) { saveToLibrary() }
                         MenuItem(R.string.m_diff, R.string.h_diff) {
                             opDlg { gm ->
                                 val t = gm.diff(dir)

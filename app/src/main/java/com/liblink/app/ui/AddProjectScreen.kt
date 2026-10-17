@@ -24,11 +24,17 @@ import com.liblink.app.storage.ProjectStorage
 import kotlinx.coroutines.launch
 
 @Composable
-fun AddProjectScreen(repo: ProjectRepository, onBack: () -> Unit, onDone: () -> Unit) {
+fun AddProjectScreen(
+    repo: ProjectRepository,
+    initialUrl: String = "",
+    initialName: String = "",
+    onBack: () -> Unit,
+    onDone: () -> Unit
+) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var name by remember { mutableStateOf("") }
-    var url by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
+    var url by remember { mutableStateOf(initialUrl) }
     var mode by remember { mutableStateOf(StorageMode.ORGANIZED) }
     var parent by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }

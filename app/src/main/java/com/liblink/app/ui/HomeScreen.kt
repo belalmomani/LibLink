@@ -57,6 +57,7 @@ private data class HomeRow(val p: Project, val s: RepoSummary?, val state: PStat
 fun HomeScreen(
     projects: List<Project>,
     onAdd: () -> Unit,
+    onLibrary: () -> Unit,
     onOpen: (String) -> Unit,
     onSettings: () -> Unit
 ) {
@@ -93,6 +94,7 @@ fun HomeScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppBar(stringResource(R.string.home_title), actions = {
+                TextButton(onClick = onLibrary) { Text(stringResource(R.string.library)) }
                 TextButton(onClick = onSettings) { Text(stringResource(R.string.settings)) }
             })
         },

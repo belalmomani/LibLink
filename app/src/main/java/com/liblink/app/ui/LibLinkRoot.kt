@@ -9,7 +9,8 @@ import java.io.File
 
 sealed interface Screen {
     object Home : Screen
-    object Add : Screen
+    data class Add(val url: String = "", val name: String = "") : Screen
+    object Library : Screen
     object Settings : Screen
     data class Project(val id: String) : Screen
     data class Files(val id: String, val dir: String? = null) : Screen
@@ -40,13 +41,17 @@ fun LibLinkRoot() {
     when (val s = screen) {
         Screen.Home -> HomeScreen(
             projects = remember(version) { repo.projects() },
-            onAdd = { screen = Screen.Add },
+            onAdd = { screen = Screen.Add() },
+            onLibrary = { screen = Screen.Library },
             onOpen = { screen = Screen.Project(it) },
             onSettings = { screen = Screen.Settings }
         )
-        Screen.Add -> AddProjectScreen(repo,
+        is Screen.Add -> AddProjectScreen(repo, s.url, s.name,
             onBack = { screen = Screen.Home },
             onDone = { version++; screen = Screen.Home })
+        Screen.Library -> LibraryScreen(
+            onBack = { screen = Screen.Home },
+            onClone = { url, name -> screen = Screen.Add(url, name) })
         Screen.Settings -> SettingsScreen(repo, onBack = { screen = Screen.Home })
         is Screen.Project -> {
             val p = repo.find(s.id)
