@@ -188,7 +188,6 @@ fun EditorScreen(file: File, drafts: DraftStore, onBack: () -> Unit) {
                                 onValueChange = { tf = it },
                                 textStyle = code.copy(color = Color.White),
                                 cursorBrush = SolidColor(Color(0xFF22D3EE)),
-                                softWrap = false,
                                 visualTransformation = transform,
                                 modifier = Modifier.defaultMinSize(minWidth = 320.dp).padding(start = 8.dp, end = 24.dp)
                             )
