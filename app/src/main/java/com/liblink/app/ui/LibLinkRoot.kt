@@ -10,6 +10,7 @@ sealed interface Screen {
     object Add : Screen
     object Settings : Screen
     data class Project(val id: String) : Screen
+    data class Files(val id: String) : Screen
 }
 
 @Composable
@@ -19,7 +20,13 @@ fun LibLinkRoot() {
     var screen by remember { mutableStateOf<Screen>(Screen.Home) }
     var version by remember { mutableIntStateOf(0) } // لتحديث القائمة بعد أي تغيير
 
-    BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
+    // الرجوع: من الملفات إلى المشروع، ومن أي شاشة أخرى إلى الرئيسية
+    BackHandler(enabled = screen != Screen.Home) {
+        screen = when (val s = screen) {
+            is Screen.Files -> Screen.Project(s.id)
+            else -> Screen.Home
+        }
+    }
 
     when (val s = screen) {
         Screen.Home -> HomeScreen(
@@ -37,7 +44,13 @@ fun LibLinkRoot() {
             if (p == null) screen = Screen.Home
             else ProjectScreen(p, repo,
                 onBack = { version++; screen = Screen.Home },
+                onFiles = { screen = Screen.Files(s.id) },
                 onRemoved = { version++; screen = Screen.Home })
+        }
+        is Screen.Files -> {
+            val p = repo.find(s.id)
+            if (p == null) screen = Screen.Home
+            else FilesScreen(p, onBack = { screen = Screen.Project(s.id) })
         }
     }
 }

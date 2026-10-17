@@ -1,11 +1,13 @@
 package com.liblink.app.storage
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import androidx.core.content.ContextCompat
 import java.io.File
 
 object ProjectStorage {
@@ -14,10 +16,22 @@ object ProjectStorage {
     fun safeName(name: String): String =
         name.trim().replace(Regex("[^\\p{L}\\p{N}._-]+"), "_").trim('_').ifEmpty { "project" }
 
-    // الوضع المنظم: LibLink/<اسم المشروع> داخل مجلد التطبيق، ولكل مشروع مجلد مستقل
-    fun organizedDir(ctx: Context, name: String): File {
-        val root = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "LibLink").apply { mkdirs() }
-        return File(root, safeName(name))
+    // الوضع المنظم: Download/LibLink/<اسم المشروع> عند توفر صلاحية الوصول للملفات،
+    // وإلا مجلد التطبيق. لكل مشروع مجلد مستقل
+    fun organizedRoot(ctx: Context): File {
+        val base = if (hasAllFilesAccess(ctx))
+            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        else ctx.getExternalFilesDir(null) ?: ctx.filesDir
+        return File(base, "LibLink").apply { mkdirs() }
+    }
+
+    fun organizedDir(ctx: Context, name: String): File = File(organizedRoot(ctx), safeName(name))
+
+    // التأكد أن المسار النسبي داخل مجلد المشروع (منع ../)
+    fun resolveInside(base: File, rel: String): File? {
+        if (rel.isBlank()) return null
+        val f = File(base, rel.trim())
+        return if (f.canonicalPath.startsWith(base.canonicalPath + File.separator)) f else null
     }
 
     // الوضع اليدوي: مجلد مستقل باسم المشروع داخل المجلد المختار
@@ -34,8 +48,10 @@ object ProjectStorage {
         return if (rel.isEmpty()) base else "$base/$rel"
     }
 
-    fun hasAllFilesAccess(): Boolean =
-        if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager() else true
+    fun hasAllFilesAccess(ctx: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= 30) Environment.isExternalStorageManager()
+        else ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) ==
+            PackageManager.PERMISSION_GRANTED
 
     fun isEmptyOrMissing(dir: File) = !dir.exists() || dir.list().isNullOrEmpty()
 

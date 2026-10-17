@@ -2,7 +2,16 @@ package com.liblink.app.ui
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.liblink.app.storage.ProjectStorage
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -48,4 +57,77 @@ fun Busy(show: Boolean) {
         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
         Text(stringResource(R.string.working))
     }
+}
+
+// ---------- حوارات مشتركة ----------
+
+@Composable
+fun FieldsDialog(
+    title: String,
+    labels: List<String>,
+    initial: List<String>,
+    multiline: Boolean = false,
+    onConfirm: (List<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val values = remember { mutableStateListOf(*initial.toTypedArray()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                labels.forEachIndexed { i, l ->
+                    OutlinedTextField(
+                        value = values[i], onValueChange = { values[i] = it },
+                        label = { Text(l) }, singleLine = !multiline,
+                        modifier = Modifier.fillMaxWidth()
+                            .then(if (multiline) Modifier.heightIn(min = 220.dp) else Modifier)
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton({ onConfirm(values.toList()) }) { Text(stringResource(R.string.ok)) } },
+        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
+}
+
+@Composable
+fun ConfirmDialog(title: String, text: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(text) },
+        confirmButton = { TextButton(onConfirm) { Text(stringResource(R.string.ok)) } },
+        dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.cancel)) } }
+    )
+}
+
+@Composable
+fun InfoDialog(title: String, text: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Box(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                Text(text, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+            }
+        },
+        confirmButton = { TextButton(onDismiss) { Text(stringResource(R.string.ok)) } }
+    )
+}
+
+// حالة صلاحية الوصول للملفات، تتحدث عند العودة من شاشة الإعدادات
+@Composable
+fun rememberAccessGranted(): Boolean {
+    val ctx = LocalContext.current
+    var granted by remember { mutableStateOf(ProjectStorage.hasAllFilesAccess(ctx)) }
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_RESUME) granted = ProjectStorage.hasAllFilesAccess(ctx)
+        }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
+    return granted
 }
