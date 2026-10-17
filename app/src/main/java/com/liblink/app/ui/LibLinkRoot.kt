@@ -15,6 +15,7 @@ sealed interface Screen {
     data class Files(val id: String, val dir: String? = null) : Screen
     data class Editor(val id: String, val path: String) : Screen
     data class Branches(val id: String) : Screen
+    data class Build(val id: String) : Screen
 }
 
 @Composable
@@ -31,6 +32,7 @@ fun LibLinkRoot() {
             is Screen.Editor -> Screen.Files(s.id, File(s.path).parent)
             is Screen.Files -> Screen.Project(s.id)
             is Screen.Branches -> Screen.Project(s.id)
+            is Screen.Build -> Screen.Project(s.id)
             else -> Screen.Home
         }
     }
@@ -53,6 +55,7 @@ fun LibLinkRoot() {
                 onBack = { version++; screen = Screen.Home },
                 onFiles = { screen = Screen.Files(s.id) },
                 onBranches = { screen = Screen.Branches(s.id) },
+                onBuild = { screen = Screen.Build(s.id) },
                 onRemoved = { version++; screen = Screen.Home })
         }
         is Screen.Files -> {
@@ -65,6 +68,11 @@ fun LibLinkRoot() {
         }
         is Screen.Editor -> EditorScreen(File(s.path), drafts,
             onBack = { screen = Screen.Files(s.id, File(s.path).parent) })
+        is Screen.Build -> {
+            val p = repo.find(s.id)
+            if (p == null) screen = Screen.Home
+            else BuildScreen(p, repo, onBack = { screen = Screen.Project(s.id) })
+        }
         is Screen.Branches -> {
             val p = repo.find(s.id)
             if (p == null) screen = Screen.Home

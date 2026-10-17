@@ -28,6 +28,7 @@ private enum class PState(val color: Color, val label: Int) {
     CHANGES(Color(0xFFF59E0B), R.string.st_changes),
     FAILED(Color(0xFFEF4444), R.string.st_failed),
     LOCAL(Color(0xFF94A3B8), R.string.st_local),
+    BROKEN(Color(0xFFEF4444), R.string.st_broken),
     UNKNOWN(Color(0xFF64748B), R.string.st_checking)
 }
 
@@ -36,9 +37,11 @@ private enum class Filter(val label: Int) {
     FAILED(R.string.st_failed), LOCAL(R.string.st_local)
 }
 
-private fun classify(p: Project, s: RepoSummary?): PState = when {
+// computed = اكتمل الفحص؛ s == null بعده يعني أن المجلد ليس مستودعًا صالحًا
+private fun classify(p: Project, s: RepoSummary?, computed: Boolean): PState = when {
+    !computed -> PState.UNKNOWN
+    s == null -> PState.BROKEN
     p.pushState == "failed" -> PState.FAILED
-    s == null -> PState.UNKNOWN
     !s.hasRemote -> PState.LOCAL
     s.changes > 0 || s.ahead > 0 -> PState.CHANGES
     else -> PState.SYNCED
@@ -71,7 +74,7 @@ fun HomeScreen(
     val rows = remember(projects, summaries, query, filter, byDate) {
         projects.map { p ->
             val s = summaries[p.id]
-            HomeRow(p, s, classify(p, s), maxOf(p.updatedAt, s?.lastCommitMs ?: 0L))
+            HomeRow(p, s, classify(p, s, summaries.containsKey(p.id)), maxOf(p.updatedAt, s?.lastCommitMs ?: 0L))
         }.filter { r ->
             val q = query.trim().lowercase()
             (q.isEmpty() || r.p.name.lowercase().contains(q) || repoName(r.p.remoteUrl).lowercase().contains(q) ||

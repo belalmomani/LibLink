@@ -237,4 +237,46 @@ class GitManager(private val creds: Credentials = Credentials("", "", "", "")) {
             }
         }.getOrNull()
     }
+
+    // إصلاح مجلد فقد بيانات .git (حُذف أو استُبدل):
+    // مجلد فارغ/مفقود ← استنساخ جديد. مجلد فيه ملفات ← git init + ربط origin + fetch
+    // ثم تحريك الفرع إلى آخر commit في GitHub مع إبقاء ملفاتك كما هي (تظهر كتغييرات).
+    suspend fun repair(dir: File, remoteUrl: String): String = withContext(Dispatchers.IO) {
+        if (remoteUrl.isNotBlank() && (!dir.exists() || dir.list().isNullOrEmpty())) {
+            dir.parentFile?.mkdirs()
+            Git.cloneRepository().setURI(remoteUrl).setDirectory(dir)
+                .setCredentialsProvider(provider()).call().close()
+            return@withContext "CLONED"
+        }
+        dir.mkdirs()
+        Git.init().setDirectory(dir).setInitialBranch("main").call().use { git ->
+            if (remoteUrl.isBlank()) return@use "INIT_ONLY"
+            writeRemote(git, remoteUrl)
+            try {
+                git.fetch().setRemote(Constants.DEFAULT_REMOTE_NAME).setCredentialsProvider(provider()).call()
+            } catch (e: Exception) {
+                // نحذف .git الجديد ليبقى زر الإصلاح متاحًا لإعادة المحاولة
+                File(dir, ".git").deleteRecursively()
+                return@use "FETCH_FAILED"
+            }
+            val repo = git.repository
+            val branch = listOf("main", "master").firstOrNull { repo.findRef("refs/remotes/origin/$it") != null }
+                ?: repo.refDatabase.getRefsByPrefix("refs/remotes/origin/")
+                    .map { it.name.removePrefix("refs/remotes/origin/") }
+                    .firstOrNull { it != "HEAD" }
+                ?: return@use "INIT_ONLY"
+            val id = repo.resolve("refs/remotes/origin/$branch")
+            val ru = repo.updateRef("refs/heads/$branch")
+            ru.setNewObjectId(id)
+            ru.forceUpdate()
+            repo.updateRef(Constants.HEAD).link("refs/heads/$branch")
+            // MIXED: يعيد بناء الـ index فقط ولا يلمس ملفات العمل
+            git.reset().setMode(ResetCommand.ResetType.MIXED).setRef("HEAD").call()
+            val cfg = repo.config
+            cfg.setString("branch", branch, "remote", Constants.DEFAULT_REMOTE_NAME)
+            cfg.setString("branch", branch, "merge", "refs/heads/$branch")
+            cfg.save()
+            "ATTACHED"
+        }
+    }
 }

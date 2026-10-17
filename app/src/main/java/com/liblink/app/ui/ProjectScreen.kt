@@ -18,6 +18,7 @@ import com.liblink.app.data.Project
 import com.liblink.app.data.ProjectRepository
 import com.liblink.app.git.GitManager
 import com.liblink.app.storage.ProjectStorage
+import org.eclipse.jgit.errors.RepositoryNotFoundException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,6 +47,7 @@ fun ProjectScreen(
     onBack: () -> Unit,
     onFiles: () -> Unit,
     onBranches: () -> Unit,
+    onBuild: () -> Unit,
     onRemoved: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -65,7 +67,13 @@ fun ProjectScreen(
         if (!busy) branch = runCatching { GitManager().currentBranch(dir) }.getOrDefault("")
     }
 
-    fun err(e: Exception) = ctx.getString(R.string.error_prefix, e.message ?: e.toString())
+    // هل المجلد مستودع Git؟ (يتغير بعد الإصلاح)
+    var repoOk by remember { mutableStateOf(File(dir, ".git").exists()) }
+
+    fun err(e: Exception) =
+        if (e is RepositoryNotFoundException || (e.message ?: "").startsWith("repository not found"))
+            ctx.getString(R.string.not_a_repo)
+        else ctx.getString(R.string.error_prefix, e.message ?: e.toString())
 
     // تشغيل عملية Git وعرض النتيجة أو الخطأ
     fun op(block: suspend (GitManager) -> String) {
@@ -96,6 +104,19 @@ fun ProjectScreen(
         val m = repo.credentials().token.isBlank()
         if (m) log = ctx.getString(R.string.no_credentials)
         return m
+    }
+
+    // إعادة ربط مجلد فقد .git بمستودع GitHub مع إبقاء الملفات الحالية
+    fun doRepair() = op { gm ->
+        val r = gm.repair(dir, remote.ifBlank { project.remoteUrl }.trim())
+        repoOk = File(dir, ".git").exists()
+        repo.markUpdated(project.id)
+        ctx.getString(when (r) {
+            "CLONED" -> R.string.repair_cloned
+            "ATTACHED" -> R.string.repair_attached
+            "FETCH_FAILED" -> R.string.repair_fetch_failed
+            else -> R.string.repair_init
+        })
     }
 
     fun doStage() = op { gm -> gm.stageAll(dir); ctx.getString(R.string.staged_ok) + "\n" + statusText(gm) }
@@ -214,6 +235,7 @@ fun ProjectScreen(
                         MenuItem(R.string.m_rebase, R.string.h_rebase) { dlg = Dlg.Rebase }
                         MenuItem(R.string.m_cherry, R.string.h_cherry) { dlg = Dlg.CherryPick }
                         MenuItem(R.string.m_branches, R.string.h_branches) { onBranches() }
+                        MenuItem(R.string.m_build_apk, R.string.h_build_apk) { onBuild() }
                         MenuItem(R.string.m_diff, R.string.h_diff) {
                             opDlg { gm ->
                                 val t = gm.diff(dir)
@@ -248,9 +270,19 @@ fun ProjectScreen(
             Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (!repoOk) {
+                StepCard(stringResource(R.string.repo_broken_title),
+                    stringResource(R.string.repo_broken_desc, project.path)) {
+                    Button(onClick = { doRepair() }, enabled = !busy) { Text(stringResource(R.string.repair_btn)) }
+                }
+            }
             Text(stringResource(R.string.path_label, project.path), style = MaterialTheme.typography.bodySmall)
             OutlinedButton(onClick = onFiles, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.browse_files))
+            }
+            // بناء APK على خوادم GitHub من الهاتف
+            Button(onClick = onBuild, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.build_apk))
             }
             Text(stringResource(R.string.steps_title), style = MaterialTheme.typography.titleLarge)
 

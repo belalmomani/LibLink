@@ -48,6 +48,10 @@ class ProjectRepository(context: Context) {
     fun setPushState(id: String, state: String) =
         change(id) { it.copy(pushState = state, updatedAt = System.currentTimeMillis()) }
 
+    // اسم ملف workflow المستخدم للبناء على GitHub لكل مشروع
+    fun workflow(id: String): String = prefs.getString("wf_$id", "build.yml") ?: "build.yml"
+    fun setWorkflow(id: String, file: String) = prefs.edit().putString("wf_$id", file).apply()
+
     fun remove(id: String) = save(projects().filterNot { it.id == id })
 
     fun find(id: String) = projects().firstOrNull { it.id == id }
