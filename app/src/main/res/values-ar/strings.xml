@@ -217,4 +217,7 @@
     <string name="repair_attached">تمت إعادة الربط. ملفاتك تظهر الآن كتغييرات مقارنة بـ GitHub.</string>
     <string name="repair_init">تم إنشاء مستودع فارغ</string>
     <string name="repair_fetch_failed">تعذر الوصول إلى GitHub. تحقق من رابط المستودع والـ Token والشبكة ثم أعد المحاولة.</string>
+    <string name="app_version">الإصدار %1$s (بناء %2$d)</string>
+    <string name="test_ads">إعلانات Start.io التجريبية</string>
+    <string name="test_ads_note">الإعلانات التجريبية تؤكد أن الربط يعمل. أعد تشغيل التطبيق لتطبيقها. أوقفها بعد اعتماد تطبيقك في Start.io لتظهر الإعلانات الحقيقية.</string>
 </resources>

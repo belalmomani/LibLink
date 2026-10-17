@@ -5,6 +5,9 @@ plugins {
 
 // ربط Firebase عند اللزوم: ضع google-services.json داخل مجلد app
 val hasFirebase = file("google-services.json").exists()
+
+// رقم الإصدار يزيد تلقائيًا مع كل بناء على GitHub (GITHUB_RUN_NUMBER) ويكون 1 في البناء المحلي
+val buildNumber = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 if (hasFirebase) {
     apply(plugin = "com.google.gms.google-services")
 }
@@ -17,12 +20,28 @@ android {
         applicationId = "com.liblink.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = buildNumber
+        versionName = "1.0.$buildNumber"
         // دعم العربية والإنجليزية فقط
         resourceConfigurations += listOf("ar", "en")
         // لعرض حالة Firebase داخل الإعدادات
         buildConfigField("boolean", "HAS_FIREBASE", hasFirebase.toString())
+    }
+
+    // مفتاح توقيع ثابت: يسمح بتحديث التطبيق فوق النسخة القديمة دون حذفها
+    // (بدونه يولّد GitHub مفتاح debug جديدًا في كل بناء فيرفض أندرويد التحديث)
+    signingConfigs {
+        create("liblink") {
+            storeFile = file("liblink.keystore")
+            storeType = "pkcs12"
+            storePassword = "liblink123"
+            keyAlias = "liblink"
+            keyPassword = "liblink123"
+        }
+    }
+    buildTypes {
+        getByName("debug") { signingConfig = signingConfigs.getByName("liblink") }
+        getByName("release") { signingConfig = signingConfigs.getByName("liblink") }
     }
 
     buildFeatures {

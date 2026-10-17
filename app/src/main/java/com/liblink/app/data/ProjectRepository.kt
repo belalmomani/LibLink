@@ -52,6 +52,10 @@ class ProjectRepository(context: Context) {
     fun workflow(id: String): String = prefs.getString("wf_$id", "build.yml") ?: "build.yml"
     fun setWorkflow(id: String, file: String) = prefs.edit().putString("wf_$id", file).apply()
 
+    // إعلانات Start.io التجريبية (تُطبَّق عند إعادة تشغيل التطبيق)
+    fun testAds(): Boolean = prefs.getBoolean("test_ads", true)
+    fun setTestAds(v: Boolean) = prefs.edit().putBoolean("test_ads", v).apply()
+
     fun remove(id: String) = save(projects().filterNot { it.id == id })
 
     fun find(id: String) = projects().firstOrNull { it.id == id }

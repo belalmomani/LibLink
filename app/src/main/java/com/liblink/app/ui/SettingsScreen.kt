@@ -7,6 +7,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -27,6 +28,7 @@ fun SettingsScreen(repo: ProjectRepository, onBack: () -> Unit) {
     var name by remember { mutableStateOf(c.authorName) }
     var email by remember { mutableStateOf(c.authorEmail) }
     var saved by remember { mutableStateOf(false) }
+    var testAds by remember { mutableStateOf(repo.testAds()) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -68,9 +70,16 @@ fun SettingsScreen(repo: ProjectRepository, onBack: () -> Unit) {
             }
 
             StepCard("Status") {
+                Text(stringResource(R.string.app_version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE))
                 Text(stringResource(if (BuildConfig.HAS_FIREBASE) R.string.firebase_on else R.string.firebase_off))
                 val adsOn = LibLinkApp.adsEnabled(stringResource(R.string.start_io_app_id))
                 Text(stringResource(if (adsOn) R.string.ads_on else R.string.ads_off))
+                // إعلانات تجريبية: تتأكد بها أن الربط يعمل (تُطبَّق بعد إعادة تشغيل التطبيق)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.test_ads), Modifier.weight(1f))
+                    Switch(checked = testAds, onCheckedChange = { testAds = it; repo.setTestAds(it) })
+                }
+                Text(stringResource(R.string.test_ads_note), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
