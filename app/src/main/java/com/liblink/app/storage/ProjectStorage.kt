@@ -55,6 +55,21 @@ object ProjectStorage {
 
     fun isEmptyOrMissing(dir: File) = !dir.exists() || dir.list().isNullOrEmpty()
 
+    // اسم غير مكرر: icon.png ← icon(1).png (مثل مدير الملفات)
+    fun uniqueFile(dir: File, name: String): File {
+        var f = File(dir, name)
+        if (!f.exists()) return f
+        val dot = name.lastIndexOf('.')
+        val base = if (dot <= 0) name else name.substring(0, dot)
+        val ext = if (dot <= 0) "" else name.substring(dot)
+        var i = 1
+        while (true) {
+            f = File(dir, "$base($i)$ext")
+            if (!f.exists()) return f
+            i++
+        }
+    }
+
     // نسخ الملفات المختارة إلى مجلد المشروع
     fun copyInto(ctx: Context, dir: File, uris: List<Uri>): Int {
         dir.mkdirs()
@@ -64,7 +79,7 @@ object ProjectStorage {
                 if (c.moveToFirst()) c.getString(c.getColumnIndexOrThrow(OpenableColumns.DISPLAY_NAME)) else null
             } ?: "file_${System.currentTimeMillis()}"
             ctx.contentResolver.openInputStream(uri)?.use { input ->
-                File(dir, name).outputStream().use { input.copyTo(it) }
+                uniqueFile(dir, name).outputStream().use { input.copyTo(it) }
                 n++
             }
         }

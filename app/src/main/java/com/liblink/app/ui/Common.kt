@@ -1,5 +1,6 @@
 package com.liblink.app.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.foundation.rememberScrollState
@@ -130,4 +131,27 @@ fun rememberAccessGranted(): Boolean {
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
     return granted
+}
+
+// شريط الفرع الحالي أسفل الشاشة (مثل MAIN في MGit) — النقر يفتح خيارات الفروع
+@Composable
+fun BranchBar(branch: String, onClick: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("\u2442", color = MaterialTheme.colorScheme.primary)
+            Text(
+                branch.ifBlank { "—" }.uppercase(),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text("\u25BE", color = MaterialTheme.colorScheme.primary)
+        }
+    }
 }

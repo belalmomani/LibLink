@@ -3,9 +3,13 @@ package com.liblink.app.git
 import com.liblink.app.data.Credentials
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.eclipse.jgit.api.CreateBranchCommand
 import org.eclipse.jgit.api.Git
+import org.eclipse.jgit.api.ListBranchCommand
 import org.eclipse.jgit.api.ResetCommand
+import org.eclipse.jgit.lib.BranchTrackingStatus
 import org.eclipse.jgit.lib.Constants
+import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.transport.RefSpec
 import org.eclipse.jgit.transport.RemoteRefUpdate
 import org.eclipse.jgit.transport.UsernamePasswordCredentialsProvider
@@ -14,8 +18,19 @@ import java.io.File
 
 data class RepoStatus(val total: Int, val added: Int, val modified: Int, val deleted: Int)
 
+// ملخص حالة المشروع لقائمة المشاريع
+data class RepoSummary(
+    val changes: Int,        // ملفات متغيرة غير مرفوعة
+    val ahead: Int,          // commits لم تُرفع بعد
+    val hasRemote: Boolean,
+    val lastCommitMs: Long,
+    val branch: String
+)
+
+data class BranchInfo(val name: String, val remote: Boolean, val current: Boolean)
+
 // عمليات Git عبر JGit (نفس مكتبة MGit)
-class GitManager(private val creds: Credentials) {
+class GitManager(private val creds: Credentials = Credentials("", "", "", "")) {
 
     private fun provider() =
         if (creds.token.isBlank()) null
@@ -166,5 +181,60 @@ class GitManager(private val creds: Credentials) {
             c.setString("user", null, "email", email)
             c.save()
         }
+    }
+
+    // ---- الفروع والملخص ----
+
+    suspend fun currentBranch(dir: File): String = withContext(Dispatchers.IO) {
+        Git.open(dir).use { val b = it.repository.branch ?: ""; if (b.length == 40) b.take(7) else b }
+    }
+
+    suspend fun branches(dir: File): List<BranchInfo> = withContext(Dispatchers.IO) {
+        Git.open(dir).use { git ->
+            val cur = git.repository.fullBranch
+            git.branchList().setListMode(ListBranchCommand.ListMode.ALL).call()
+                .filter { !it.name.endsWith("/HEAD") }
+                .map { BranchInfo(Repository.shortenRefName(it.name), it.name.startsWith("refs/remotes/"), it.name == cur) }
+        }
+    }
+
+    // الانتقال لفرع محلي، أو إنشاء فرع محلي يتتبع الفرع البعيد
+    suspend fun checkout(dir: File, b: BranchInfo) = withContext(Dispatchers.IO) {
+        Git.open(dir).use { git ->
+            if (!b.remote) git.checkout().setName(b.name).call()
+            else {
+                val local = b.name.substringAfter('/')
+                if (git.repository.findRef("refs/heads/$local") != null) git.checkout().setName(local).call()
+                else git.checkout().setCreateBranch(true).setName(local).setStartPoint(b.name)
+                    .setUpstreamMode(CreateBranchCommand.SetupUpstreamMode.TRACK).call()
+            }
+        }
+    }
+
+    suspend fun createBranch(dir: File, name: String) = withContext(Dispatchers.IO) {
+        Git.open(dir).use { it.checkout().setCreateBranch(true).setName(name.trim()).call() }
+    }
+
+    suspend fun deleteBranch(dir: File, name: String) = withContext(Dispatchers.IO) {
+        Git.open(dir).use { it.branchDelete().setBranchNames(name).setForce(true).call() }
+    }
+
+    suspend fun summary(dir: File): RepoSummary? = withContext(Dispatchers.IO) {
+        runCatching {
+            Git.open(dir).use { git ->
+                val repo = git.repository
+                val s = git.status().call()
+                val changes = s.untracked.size + s.added.size + s.modified.size +
+                    s.changed.size + s.missing.size + s.removed.size
+                val hasRemote = repo.config.getString("remote", Constants.DEFAULT_REMOTE_NAME, "url") != null
+                val head = repo.resolve("HEAD")
+                val branch = repo.branch ?: ""
+                var ahead = 0
+                if (head != null && hasRemote) ahead = BranchTrackingStatus.of(repo, branch)?.aheadCount ?: 1
+                val last = if (head != null)
+                    (git.log().setMaxCount(1).call().firstOrNull()?.commitTime?.toLong() ?: 0L) * 1000 else 0L
+                RepoSummary(changes, ahead, hasRemote, last, branch)
+            }
+        }.getOrNull()
     }
 }

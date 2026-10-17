@@ -8,7 +8,9 @@ data class Project(
     val name: String,
     val path: String,       // مجلد المشروع المستقل
     val remoteUrl: String,
-    val mode: StorageMode
+    val mode: StorageMode,
+    val updatedAt: Long = 0L,     // آخر نشاط داخل التطبيق
+    val pushState: String = ""    // "" أو "ok" أو "failed" (حالة آخر رفع)
 )
 
 data class Credentials(

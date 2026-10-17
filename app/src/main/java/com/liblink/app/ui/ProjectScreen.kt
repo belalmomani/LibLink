@@ -2,6 +2,7 @@ package com.liblink.app.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.liblink.app.R
 import com.liblink.app.data.Project
@@ -43,6 +45,7 @@ fun ProjectScreen(
     repo: ProjectRepository,
     onBack: () -> Unit,
     onFiles: () -> Unit,
+    onBranches: () -> Unit,
     onRemoved: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -54,6 +57,13 @@ fun ProjectScreen(
     var log by remember { mutableStateOf("") }
     var dlg by remember { mutableStateOf<Dlg?>(null) }
     var menu by remember { mutableStateOf(false) }
+    var helpOpen by remember { mutableIntStateOf(0) } // ملاحظة "؟" المفتوحة حاليًا
+    var branch by remember { mutableStateOf("") }
+
+    // تحديث اسم الفرع بعد كل عملية
+    LaunchedEffect(busy) {
+        if (!busy) branch = runCatching { GitManager().currentBranch(dir) }.getOrDefault("")
+    }
 
     fun err(e: Exception) = ctx.getString(R.string.error_prefix, e.message ?: e.toString())
 
@@ -95,28 +105,33 @@ fun ProjectScreen(
         op { gm ->
             val id = gm.commit(dir, msg.trim())
             commitMsg = ""
+            repo.markUpdated(project.id)
             ctx.getString(R.string.commit_ok, id)
         }
     }
 
+    // الرفع مع تسجيل نجاحه أو فشله ليظهر في قائمة المشاريع
     fun doPush() {
         if (remote.isBlank()) log = ctx.getString(R.string.no_remote)
         else if (!missingCreds()) op { gm ->
             gm.setRemote(dir, remote.trim())
-            repo.update(project.copy(remoteUrl = remote.trim()))
-            gm.push(dir)
+            repo.setRemote(project.id, remote.trim())
+            try { gm.push(dir) } catch (e: Exception) { repo.setPushState(project.id, "failed"); throw e }
+            repo.setPushState(project.id, "ok")
             ctx.getString(R.string.push_ok)
         }
     }
 
-    fun doPull() { if (!missingCreds()) op { gm -> gm.pull(dir); ctx.getString(R.string.pull_ok) } }
+    fun doPull() {
+        if (!missingCreds()) op { gm -> gm.pull(dir); repo.markUpdated(project.id); ctx.getString(R.string.pull_ok) }
+    }
     fun doFetch() { if (!missingCreds()) op { gm -> gm.fetch(dir); ctx.getString(R.string.fetch_ok) } }
 
     fun saveRemote(url: String) {
         if (url.isBlank()) { log = ctx.getString(R.string.no_remote); return }
         op { gm ->
             gm.setRemote(dir, url.trim())
-            repo.update(project.copy(remoteUrl = url.trim()))
+            repo.setRemote(project.id, url.trim())
             remote = url.trim()
             ctx.getString(R.string.remote_added)
         }
@@ -124,7 +139,7 @@ fun ProjectScreen(
 
     fun removeRemote() = op { gm ->
         gm.removeRemote(dir)
-        repo.update(project.copy(remoteUrl = ""))
+        repo.setRemote(project.id, "")
         remote = ""
         ctx.getString(R.string.remote_removed)
     }
@@ -149,19 +164,38 @@ fun ProjectScreen(
         }
     }
 
-    // الخطوة 1: نسخ ملفات من الهاتف إلى مجلد المشروع
+    // الخطوة 1: نسخ ملفات من الهاتف إلى مجلد المشروع (بأسماء غير مكررة)
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) op { gm ->
             val n = withContext(Dispatchers.IO) { ProjectStorage.copyInto(ctx, dir, uris) }
+            repo.markUpdated(project.id)
             ctx.getString(R.string.files_copied, n) + "\n" + statusText(gm)
         }
     }
 
+    // عنصر قائمة مع علامة "؟" تعرض ملاحظة صغيرة عن عمله
     @Composable
-    fun MenuItem(res: Int, action: () -> Unit) = DropdownMenuItem(
-        text = { Text(stringResource(res)) },
-        onClick = { menu = false; action() }
-    )
+    fun MenuItem(res: Int, help: Int, action: () -> Unit) {
+        DropdownMenuItem(
+            text = { Text(stringResource(res)) },
+            onClick = { menu = false; helpOpen = 0; action() },
+            trailingIcon = {
+                Text(
+                    "?", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clickable { helpOpen = if (helpOpen == help) 0 else help }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                )
+            }
+        )
+        if (helpOpen == help) {
+            Text(
+                stringResource(help), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).widthIn(max = 280.dp)
+            )
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -169,37 +203,46 @@ fun ProjectScreen(
             AppBar(project.name, onBack, actions = {
                 Box {
                     TextButton({ menu = true }) { Text("\u22EE") }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        MenuItem(R.string.m_pull) { doPull() }
-                        MenuItem(R.string.m_push) { doPush() }
-                        MenuItem(R.string.m_stage) { doStage() }
-                        MenuItem(R.string.m_commit) { dlg = Dlg.Commit }
-                        MenuItem(R.string.m_reset) { dlg = Dlg.Reset }
-                        MenuItem(R.string.m_merge) { dlg = Dlg.Merge }
-                        MenuItem(R.string.m_fetch) { doFetch() }
-                        MenuItem(R.string.m_rebase) { dlg = Dlg.Rebase }
-                        MenuItem(R.string.m_cherry) { dlg = Dlg.CherryPick }
-                        MenuItem(R.string.m_diff) {
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false; helpOpen = 0 }) {
+                        MenuItem(R.string.m_pull, R.string.h_pull) { doPull() }
+                        MenuItem(R.string.m_push, R.string.h_push) { doPush() }
+                        MenuItem(R.string.m_stage, R.string.h_stage) { doStage() }
+                        MenuItem(R.string.m_commit, R.string.h_commit) { dlg = Dlg.Commit }
+                        MenuItem(R.string.m_reset, R.string.h_reset) { dlg = Dlg.Reset }
+                        MenuItem(R.string.m_merge, R.string.h_merge) { dlg = Dlg.Merge }
+                        MenuItem(R.string.m_fetch, R.string.h_fetch) { doFetch() }
+                        MenuItem(R.string.m_rebase, R.string.h_rebase) { dlg = Dlg.Rebase }
+                        MenuItem(R.string.m_cherry, R.string.h_cherry) { dlg = Dlg.CherryPick }
+                        MenuItem(R.string.m_branches, R.string.h_branches) { onBranches() }
+                        MenuItem(R.string.m_diff, R.string.h_diff) {
                             opDlg { gm ->
                                 val t = gm.diff(dir)
                                 Dlg.Info(ctx.getString(R.string.m_diff),
                                     if (t.isBlank()) ctx.getString(R.string.diff_empty) else t.take(30000))
                             }
                         }
-                        MenuItem(R.string.m_new_file) { dlg = Dlg.NewFile }
-                        MenuItem(R.string.m_new_dir) { dlg = Dlg.NewDir }
-                        MenuItem(R.string.m_add_remote) { dlg = Dlg.AddRemote }
-                        MenuItem(R.string.m_remove_remote) { removeRemote() }
-                        MenuItem(R.string.m_delete) { dlg = Dlg.Delete }
-                        MenuItem(R.string.m_raw_config) { opDlg { gm -> Dlg.Raw(gm.readConfig(dir)) } }
-                        MenuItem(R.string.m_config) {
+                        MenuItem(R.string.m_new_file, R.string.h_new_file) { dlg = Dlg.NewFile }
+                        MenuItem(R.string.m_new_dir, R.string.h_new_dir) { dlg = Dlg.NewDir }
+                        MenuItem(R.string.m_add_remote, R.string.h_add_remote) { dlg = Dlg.AddRemote }
+                        MenuItem(R.string.m_remove_remote, R.string.h_remove_remote) { removeRemote() }
+                        MenuItem(R.string.m_delete, R.string.h_delete) { dlg = Dlg.Delete }
+                        MenuItem(R.string.m_raw_config, R.string.h_raw_config) {
+                            opDlg { gm -> Dlg.Raw(gm.readConfig(dir)) }
+                        }
+                        MenuItem(R.string.m_config, R.string.h_config) {
                             opDlg { gm -> val (n, e) = gm.getUser(dir); Dlg.Cfg(n, e) }
                         }
                     }
                 }
             })
         },
-        bottomBar = { AdBanner(Modifier.fillMaxWidth().navigationBarsPadding()) }
+        // أسفل المشروع: الفرع الحالي (النقر يفتح خيارات الفروع) ثم الإعلان
+        bottomBar = {
+            Column {
+                BranchBar(branch, onBranches)
+                AdBanner(Modifier.fillMaxWidth().navigationBarsPadding())
+            }
+        }
     ) { pad ->
         Column(
             Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()),
