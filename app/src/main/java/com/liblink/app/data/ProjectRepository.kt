@@ -56,6 +56,11 @@ class ProjectRepository(context: Context) {
     fun testAds(): Boolean = prefs.getBoolean("test_ads", true)
     fun setTestAds(v: Boolean) = prefs.edit().putBoolean("test_ads", v).apply()
 
+    // ترقيم تلقائي لرسائل الـ Commit: v1 ثم v1.1 ثم v1.2 ...
+    private fun commitCount(id: String) = prefs.getInt("ver_$id", 0)
+    fun versionLabel(id: String): String = commitCount(id).let { if (it == 0) "v1" else "v1.$it" }
+    fun bumpVersion(id: String) = prefs.edit().putInt("ver_$id", commitCount(id) + 1).apply()
+
     fun remove(id: String) = save(projects().filterNot { it.id == id })
 
     fun find(id: String) = projects().firstOrNull { it.id == id }

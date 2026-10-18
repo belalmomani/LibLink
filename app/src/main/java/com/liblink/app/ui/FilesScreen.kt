@@ -1,8 +1,6 @@
 package com.liblink.app.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,6 +16,7 @@ import com.liblink.app.R
 import com.liblink.app.data.Project
 import com.liblink.app.git.GitManager
 import com.liblink.app.storage.ProjectStorage
+import com.liblink.app.storage.Trash
 import java.io.File
 
 private sealed interface FDlg {
@@ -27,14 +26,15 @@ private sealed interface FDlg {
     data class Delete(val file: File) : FDlg
 }
 
-// متصفح ملفات المشروع: فتح، محرر، نسخ، إعادة تسمية، حذف، استيراد، وشريط الفرع
+// متصفح ملفات المشروع: فتح، محرر، نسخ، إعادة تسمية، حذف (إلى السلة)، استيراد ملفات/مجلدات
 @Composable
 fun FilesScreen(
     project: Project,
     startDir: String?,
     onBack: () -> Unit,
     onOpenFile: (File) -> Unit,
-    onBranches: () -> Unit
+    onBranches: () -> Unit,
+    onTrash: () -> Unit
 ) {
     val ctx = LocalContext.current
     val root = remember(project.path) { File(project.path) }
@@ -94,15 +94,9 @@ fun FilesScreen(
         } catch (e: Exception) { err(e) }
     }
 
-    // استيراد ملفات من الهاتف إلى المجلد الحالي (بأسماء غير مكررة)
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) {
-            try {
-                val n = ProjectStorage.copyInto(ctx, cur, uris)
-                msg = ctx.getString(R.string.files_copied, n); tick++
-            } catch (e: Exception) { err(e) }
-        }
-    }
+    // استيراد ملفات أو مجلد إلى المجلد الحالي مع خيار الاستبدال
+    val importer = rememberImportUi(cur) { m -> msg = m; tick++ }
+    val zipper = rememberZipUi(cur) { m -> msg = m; tick++ }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -113,8 +107,10 @@ fun FilesScreen(
                     DropdownMenu(addMenu, { addMenu = false }) {
                         DropdownMenuItem({ Text(stringResource(R.string.m_new_file)) }, { addMenu = false; dlg = FDlg.NewFile })
                         DropdownMenuItem({ Text(stringResource(R.string.m_new_dir)) }, { addMenu = false; dlg = FDlg.NewDir })
-                        DropdownMenuItem({ Text(stringResource(R.string.import_files)) },
-                            { addMenu = false; picker.launch(arrayOf("*/*")) })
+                        DropdownMenuItem({ Text(stringResource(R.string.import_files)) }, { addMenu = false; importer.pickFiles() })
+                        DropdownMenuItem({ Text(stringResource(R.string.import_folder)) }, { addMenu = false; importer.pickFolder() })
+                        DropdownMenuItem({ Text(stringResource(R.string.import_zip)) }, { addMenu = false; zipper.pickZip() })
+                        DropdownMenuItem({ Text(stringResource(R.string.trash_title)) }, { addMenu = false; onTrash() })
                     }
                 }
             })
@@ -169,10 +165,13 @@ fun FilesScreen(
         is FDlg.Rename -> FieldsDialog(stringResource(R.string.rename),
             listOf(stringResource(R.string.new_name)), listOf(d.file.name),
             onConfirm = { rename(d.file, it[0]); dlg = null }, onDismiss = { dlg = null })
+        // الحذف ينقل العنصر إلى سلة المحذوفات (يبقى 3 أيام ثم يُحذف تلقائيًا)
         is FDlg.Delete -> ConfirmDialog(stringResource(R.string.delete),
-            stringResource(R.string.delete_confirm, d.file.name),
+            stringResource(R.string.delete_confirm, d.file.name) + "\n" + stringResource(R.string.trash_moved),
             onConfirm = {
-                d.file.deleteRecursively(); msg = ctx.getString(R.string.deleted); tick++; dlg = null
+                try { Trash.put(ctx, d.file, "deleted"); msg = ctx.getString(R.string.trash_moved); tick++ }
+                catch (e: Exception) { err(e) }
+                dlg = null
             }, onDismiss = { dlg = null })
     }
 }

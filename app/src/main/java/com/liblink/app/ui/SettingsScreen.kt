@@ -21,7 +21,7 @@ import com.liblink.app.data.Credentials
 import com.liblink.app.data.ProjectRepository
 
 @Composable
-fun SettingsScreen(repo: ProjectRepository, onBack: () -> Unit) {
+fun SettingsScreen(repo: ProjectRepository, onBack: () -> Unit, onTrash: () -> Unit) {
     val c = remember { repo.credentials() }
     var user by remember { mutableStateOf(c.user) }
     var token by remember { mutableStateOf(c.token) }
@@ -67,6 +67,10 @@ fun SettingsScreen(repo: ProjectRepository, onBack: () -> Unit) {
                     saved = true
                 }) { Text(stringResource(R.string.save)) }
                 if (saved) Text(stringResource(R.string.saved), color = MaterialTheme.colorScheme.primary)
+            }
+
+            StepCard(stringResource(R.string.trash_title), stringResource(R.string.trash_note)) {
+                OutlinedButton(onClick = onTrash) { Text(stringResource(R.string.trash_title)) }
             }
 
             StepCard("Status") {

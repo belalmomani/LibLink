@@ -18,6 +18,8 @@ class GitHubApi(private val token: String) {
         val url: String, val branch: String, val createdAt: String
     )
 
+    data class Job(val id: Long, val name: String, val conclusion: String?)
+
     data class Artifact(val id: Long, val name: String, val size: Long, val expired: Boolean, val downloadUrl: String)
 
     private fun open(url: String, method: String = "GET", auth: Boolean = true): HttpURLConnection {
@@ -112,6 +114,64 @@ class GitHubApi(private val token: String) {
         zipFile.delete()
         if (!found) throw GitHubException(0, "NO_APK")
         apkFile
+    }
+
+    suspend fun jobs(owner: String, repo: String, runId: Long): List<Job> = withContext(Dispatchers.IO) {
+        val j = getJson("https://api.github.com/repos/$owner/$repo/actions/runs/$runId/jobs")
+        val arr = j.optJSONArray("jobs") ?: return@withContext emptyList()
+        (0 until arr.length()).map {
+            val o = arr.getJSONObject(it)
+            Job(o.getLong("id"), o.optString("name"), if (o.isNull("conclusion")) null else o.optString("conclusion"))
+        }
+    }
+
+    // أهم سطور الخطأ من سجل المهمة (Job) الفاشلة، بدل تنزيل السجل كاملًا
+    suspend fun failureSummary(owner: String, repo: String, runId: Long): String = withContext(Dispatchers.IO) {
+        val failed = jobs(owner, repo, runId).filter { it.conclusion == "failure" }
+        val out = StringBuilder()
+        for (job in failed) {
+            var c = open("https://api.github.com/repos/$owner/$repo/actions/jobs/${job.id}/logs")
+            try {
+                check(c)
+                val stream = if (c.responseCode == 302) {
+                    val loc = c.getHeaderField("Location") ?: continue
+                    c.disconnect()
+                    c = open(loc, auth = false) // الرابط الموقّع لا يحتاج Token
+                    check(c)
+                    c.inputStream
+                } else c.inputStream
+                out.append("[").append(job.name).append("]\n")
+                    .append(extractErrors(stream.bufferedReader().lineSequence())).append("\n")
+            } finally { c.disconnect() }
+        }
+        out.toString().trim()
+    }
+
+    private val errorRegex = Regex(
+        "(^e: |error:|\\bERROR\\b|FAILED|What went wrong|Execution failed|Unresolved reference|" +
+            "Could not resolve|Caused by|BUILD FAILED|##\\[error\\])", RegexOption.IGNORE_CASE
+    )
+    private val timeRegex = Regex("^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z ")
+
+    private fun extractErrors(lines: Sequence<String>): String {
+        val kept = LinkedHashSet<String>()
+        val tail = ArrayDeque<String>()
+        var extra = 0
+        for (raw in lines) {
+            val line = raw.replace(timeRegex, "").trim()
+            if (line.isEmpty()) continue
+            tail.addLast(line)
+            if (tail.size > 40) tail.removeFirst()
+            if (errorRegex.containsMatchIn(line)) {
+                kept.add(line.take(300))
+                // بعد "What went wrong" يأتي سبب الفشل في الأسطر التالية
+                if (line.contains("went wrong", true) || line.contains("Execution failed", true)) extra = 3
+            } else if (extra > 0) {
+                kept.add(line.take(300)); extra--
+            }
+            if (kept.size >= 80) break
+        }
+        return (if (kept.isEmpty()) tail.toList() else kept.toList()).joinToString("\n")
     }
 
     companion object {

@@ -21,9 +21,9 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.liblink.app.R
-import com.liblink.app.data.LibCategories
 import com.liblink.app.data.LibItem
 import com.liblink.app.data.LibraryRepository
+import com.liblink.app.data.suggestLibName
 import com.liblink.app.network.GitHubApi
 
 // اسم التصنيف: الافتراضي مترجم، والمخصص كما كتبه المستخدم
@@ -42,19 +42,26 @@ private val STAR = Color(0xFFF59E0B)
 
 // مكتبتي: حفظ المستودعات والمكتبات المفضلة محليًا وتصنيفها والرجوع إليها بسرعة
 @Composable
-fun LibraryScreen(onBack: () -> Unit, onClone: (url: String, name: String) -> Unit) {
+fun LibraryScreen(share: String? = null, onBack: () -> Unit, onClone: (url: String, name: String) -> Unit) {
     val ctx = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val lib = remember { LibraryRepository(ctx) }
+    val access = rememberAccessGranted()
+    val requestAccess = rememberAccessRequester()
     var tick by remember { mutableIntStateOf(0) }
     val all = remember(tick) { lib.items() }
     val categories = remember(tick) { lib.categories() }
+    val missing = remember(tick, access) { if (access) lib.backupMissingCount() else 0 }
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("") } // "" = الكل، "*" = المفضلة، غير ذلك = تصنيف
-    var adding by remember { mutableStateOf(false) }
+    var adding by remember { mutableStateOf(share != null) }
+    var prefill by remember { mutableStateOf(share ?: "") } // رابط جاء من المشاركة
     var editing by remember { mutableStateOf<LibItem?>(null) }
     var deleting by remember { mutableStateOf<LibItem?>(null) }
     var msg by remember { mutableStateOf("") }
+
+    // عند منح صلاحية الملفات نكتب النسخة الاحتياطية فورًا
+    LaunchedEffect(access) { if (access && lib.backupMissingCount() == 0) lib.writeBackup() }
 
     val shown = remember(all, query, filter) {
         val q = query.trim().lowercase()
@@ -79,6 +86,21 @@ fun LibraryScreen(onBack: () -> Unit, onClone: (url: String, name: String) -> Un
         }
     ) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
+            // استعادة من نسخة احتياطية قديمة (بعد إعادة تثبيت التطبيق مثلًا)
+            if (missing > 0) {
+                StepCard(stringResource(R.string.lib_restore_title), stringResource(R.string.lib_restore_msg, missing)) {
+                    Button({
+                        val n = lib.restoreFromBackup()
+                        msg = ctx.getString(R.string.restore_done, n); tick++
+                    }) { Text(stringResource(R.string.lib_restore_btn)) }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            if (!access) {
+                StepCard(stringResource(R.string.lib_backup_title), stringResource(R.string.lib_backup_desc)) {
+                    OutlinedButton({ requestAccess() }) { Text(stringResource(R.string.grant)) }
+                }
+            }
             OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(top = 8.dp),
                 label = { Text(stringResource(R.string.search_hint)) }, singleLine = true)
             LazyRow(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -94,8 +116,7 @@ fun LibraryScreen(onBack: () -> Unit, onClone: (url: String, name: String) -> Un
                     Text(stringResource(if (all.isEmpty()) R.string.lib_empty else R.string.no_results))
                 }
             } else LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
-                items(shown, key = { it.id }) { it ->
-                    val item = it
+                items(shown, key = { it.id }) { item ->
                     val gh = GitHubApi.parse(item.url)
                     val isLink = item.url.startsWith("http", ignoreCase = true)
                     var menu by remember { mutableStateOf(false) }
@@ -146,21 +167,20 @@ fun LibraryScreen(onBack: () -> Unit, onClone: (url: String, name: String) -> Un
 
     if (adding || editing != null) {
         LibItemDialog(
-            initial = editing, categories = categories,
-            onSave = { name, url, cat, note, newCat ->
+            initial = editing, categories = categories, prefillUrl = prefill,
+            onSave = { name, url, cat, note, newCat, clone ->
                 val category = newCat.trim().ifEmpty { cat }
                 if (newCat.isNotBlank()) lib.addCategory(newCat)
-                val finalName = name.trim().ifEmpty {
-                    GitHubApi.parse(url)?.second ?: url.trim().trimEnd('/').substringAfterLast('/').ifBlank { url.trim() }
-                }
+                val finalName = name.trim().ifEmpty { suggestLibName(url).ifBlank { url.trim() } }
                 val e = editing
                 if (e == null) {
                     if (lib.exists(url)) msg = ctx.getString(R.string.lib_exists)
                     else { lib.add(finalName, url.trim(), category, note.trim()); msg = ctx.getString(R.string.lib_saved) }
                 } else lib.update(e.copy(name = finalName, url = url.trim(), category = category, note = note.trim()))
-                adding = false; editing = null; tick++
+                adding = false; editing = null; prefill = ""; tick++
+                if (clone) onClone(url.trim(), finalName)
             },
-            onDismiss = { adding = false; editing = null }
+            onDismiss = { adding = false; editing = null; prefill = "" }
         )
     }
 
@@ -173,36 +193,58 @@ fun LibraryScreen(onBack: () -> Unit, onClone: (url: String, name: String) -> Un
 @Composable
 private fun LibItemDialog(
     initial: LibItem?,
+    prefillUrl: String,
     categories: List<String>,
-    onSave: (name: String, url: String, category: String, note: String, newCategory: String) -> Unit,
+    onSave: (name: String, url: String, category: String, note: String, newCategory: String, clone: Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
-    var name by remember { mutableStateOf(initial?.name ?: "") }
-    var url by remember { mutableStateOf(initial?.url ?: "") }
+    var name by remember { mutableStateOf(initial?.name ?: suggestLibName(prefillUrl)) }
+    var url by remember { mutableStateOf(initial?.url ?: prefillUrl) }
     var note by remember { mutableStateOf(initial?.note ?: "") }
     var cat by remember { mutableStateOf(initial?.category ?: "other") }
     var newCat by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
+    // الاسم يُؤخذ تلقائيًا من آخر الرابط ما لم يعدّله المستخدم بنفسه
+    var autoName by remember { mutableStateOf(initial == null) }
+    val suggested = suggestLibName(url)
+
+    fun setUrl(v: String) {
+        url = v; error = false
+        if (autoName) name = suggestLibName(v)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(if (initial == null) R.string.lib_add else R.string.lib_edit)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(url, { url = it; error = false }, Modifier.fillMaxWidth(),
+                OutlinedTextField(url, { setUrl(it) }, Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.lib_url)) }, isError = error,
                     supportingText = { if (error) Text(stringResource(R.string.lib_url_required)) },
                     trailingIcon = {
-                        TextButton({ clipboard.getText()?.text?.let { url = it.trim(); error = false } }) {
+                        TextButton({ clipboard.getText()?.text?.let { setUrl(it.trim()) } }) {
                             Text(stringResource(R.string.paste))
                         }
                     })
-                OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(),
+                OutlinedTextField(name, { name = it; autoName = false }, Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.lib_name)) }, singleLine = true)
+                // موافقة المستخدم على الاسم المأخوذ من الرابط
+                if (suggested.isNotBlank()) {
+                    if (name != suggested) {
+                        TextButton({ name = suggested; autoName = true }) {
+                            Text(stringResource(R.string.lib_use_name, suggested))
+                        }
+                    } else if (initial == null) {
+                        Text(stringResource(R.string.lib_name_from_link), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
+                }
                 Text(stringResource(R.string.lib_category), style = MaterialTheme.typography.labelMedium)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(categories) { c -> FilterChip(cat == c && newCat.isBlank(), { cat = c; newCat = "" }, { Text(categoryLabel(c)) }) }
+                    items(categories) { c ->
+                        FilterChip(cat == c && newCat.isBlank(), { cat = c; newCat = "" }, { Text(categoryLabel(c)) })
+                    }
                 }
                 OutlinedTextField(newCat, { newCat = it }, Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.lib_new_category)) }, singleLine = true)
@@ -211,9 +253,17 @@ private fun LibItemDialog(
             }
         },
         confirmButton = {
-            TextButton({
-                if (url.isBlank()) error = true else onSave(name, url, cat, note, newCat)
-            }) { Text(stringResource(R.string.save)) }
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton({ if (url.isBlank()) error = true else onSave(name, url, cat, note, newCat, false) }) {
+                    Text(stringResource(R.string.save))
+                }
+                // "الاستدعاء": حفظ ثم إضافة المستودع كمشروع مباشرة
+                if (initial == null && GitHubApi.parse(url) != null) {
+                    TextButton({ onSave(name, url, cat, note, newCat, true) }) {
+                        Text(stringResource(R.string.lib_save_clone))
+                    }
+                }
+            }
         },
         dismissButton = { TextButton(onDismiss) { Text(stringResource(R.string.cancel)) } }
     )

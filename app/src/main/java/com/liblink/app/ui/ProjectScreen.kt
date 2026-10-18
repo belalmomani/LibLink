@@ -128,7 +128,14 @@ fun ProjectScreen(
         else { lib.add(project.name, remote.trim(), "other", ""); ctx.getString(R.string.lib_saved) }
     }
 
-    fun doStage() = op { gm -> gm.stageAll(dir); ctx.getString(R.string.staged_ok) + "\n" + statusText(gm) }
+    // رسالة Commit تلقائية: اسم المشروع + الإصدار، ويمكن تعديلها
+    fun autoMessage() = "${project.name} ${repo.versionLabel(project.id)}"
+
+    fun doStage() = op { gm ->
+        gm.stageAll(dir)
+        if (commitMsg.isBlank()) commitMsg = autoMessage()
+        ctx.getString(R.string.staged_ok) + "\n" + statusText(gm)
+    }
 
     fun doCommit(msg: String) {
         if (msg.isBlank()) { log = ctx.getString(R.string.commit_empty); return }
@@ -136,6 +143,7 @@ fun ProjectScreen(
             val id = gm.commit(dir, msg.trim())
             commitMsg = ""
             repo.markUpdated(project.id)
+            repo.bumpVersion(project.id) // الإصدار التالي: v1 ← v1.1 ← v1.2
             ctx.getString(R.string.commit_ok, id)
         }
     }
@@ -149,6 +157,29 @@ fun ProjectScreen(
             try { gm.push(dir) } catch (e: Exception) { repo.setPushState(project.id, "failed"); throw e }
             repo.setPushState(project.id, "ok")
             ctx.getString(R.string.push_ok)
+        }
+    }
+
+    // نشر بنقرة واحدة: تجهيز ← Commit بالتعليق التلقائي ← Push
+    fun doPublish() {
+        if (remote.isBlank()) { log = ctx.getString(R.string.no_remote); return }
+        if (missingCreds()) return
+        op { gm ->
+            gm.setRemote(dir, remote.trim())
+            repo.setRemote(project.id, remote.trim())
+            gm.stageAll(dir)
+            var committed = ""
+            if (gm.status(dir).total > 0) {
+                val msg = commitMsg.ifBlank { autoMessage() }
+                gm.commit(dir, msg)
+                repo.bumpVersion(project.id)
+                commitMsg = ""
+                committed = msg
+            }
+            try { gm.push(dir) } catch (e: Exception) { repo.setPushState(project.id, "failed"); throw e }
+            repo.setPushState(project.id, "ok")
+            if (committed.isNotEmpty()) ctx.getString(R.string.publish_done, committed)
+            else ctx.getString(R.string.publish_nochanges)
         }
     }
 
@@ -194,14 +225,10 @@ fun ProjectScreen(
         }
     }
 
-    // الخطوة 1: نسخ ملفات من الهاتف إلى مجلد المشروع (بأسماء غير مكررة)
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) op { gm ->
-            val n = withContext(Dispatchers.IO) { ProjectStorage.copyInto(ctx, dir, uris) }
-            repo.markUpdated(project.id)
-            ctx.getString(R.string.files_copied, n) + "\n" + statusText(gm)
-        }
-    }
+    // الخطوة 1: استيراد ملفات أو مجلد من الهاتف مع خيار الاستبدال (القديم يذهب لسلة المحذوفات)
+    val importer = rememberImportUi(dir) { m -> log = m; repo.markUpdated(project.id) }
+    // تحديث المشروع من ملف ZIP
+    val zipper = rememberZipUi(dir) { m -> log = m; repo.markUpdated(project.id) }
 
     // عنصر قائمة مع علامة "؟" تعرض ملاحظة صغيرة عن عمله
     @Composable
@@ -236,8 +263,12 @@ fun ProjectScreen(
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false; helpOpen = 0 }) {
                         MenuItem(R.string.m_pull, R.string.h_pull) { doPull() }
                         MenuItem(R.string.m_push, R.string.h_push) { doPush() }
+                        MenuItem(R.string.m_publish, R.string.h_publish) { doPublish() }
                         MenuItem(R.string.m_stage, R.string.h_stage) { doStage() }
-                        MenuItem(R.string.m_commit, R.string.h_commit) { dlg = Dlg.Commit }
+                        MenuItem(R.string.m_commit, R.string.h_commit) {
+                            if (commitMsg.isBlank()) commitMsg = autoMessage()
+                            dlg = Dlg.Commit
+                        }
                         MenuItem(R.string.m_reset, R.string.h_reset) { dlg = Dlg.Reset }
                         MenuItem(R.string.m_merge, R.string.h_merge) { dlg = Dlg.Merge }
                         MenuItem(R.string.m_fetch, R.string.h_fetch) { doFetch() }
@@ -290,15 +321,27 @@ fun ProjectScreen(
             OutlinedButton(onClick = onFiles, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.browse_files))
             }
+            // نشر بنقرة واحدة: تجهيز + Commit + Push
+            Button(onClick = { doPublish() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.publish_btn))
+            }
             // بناء APK على خوادم GitHub من الهاتف
-            Button(onClick = onBuild, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = onBuild, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.build_apk))
             }
             Text(stringResource(R.string.steps_title), style = MaterialTheme.typography.titleLarge)
 
             StepCard(stringResource(R.string.step1_title), stringResource(R.string.step1_desc)) {
-                Button(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !busy) {
-                    Text(stringResource(R.string.step1_btn))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { importer.pickFiles() }, enabled = !busy) {
+                        Text(stringResource(R.string.step1_btn))
+                    }
+                    OutlinedButton(onClick = { importer.pickFolder() }, enabled = !busy) {
+                        Text(stringResource(R.string.step1_folder_btn))
+                    }
+                }
+                OutlinedButton(onClick = { zipper.pickZip() }, enabled = !busy) {
+                    Text(stringResource(R.string.step1_zip_btn))
                 }
             }
 

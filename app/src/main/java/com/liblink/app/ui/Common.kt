@@ -1,5 +1,11 @@
 package com.liblink.app.ui
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -153,5 +159,22 @@ fun BranchBar(branch: String, onClick: () -> Unit) {
             )
             Text("\u25BE", color = MaterialTheme.colorScheme.primary)
         }
+    }
+}
+
+// دالة لطلب صلاحية الوصول للملفات (أندرويد 11+ عبر الإعدادات، وأقل عبر نافذة الصلاحية)
+@Composable
+fun rememberAccessRequester(): () -> Unit {
+    val ctx = LocalContext.current
+    val legacy = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+    return {
+        if (Build.VERSION.SDK_INT >= 30)
+            ctx.startActivity(
+                Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        else legacy.launch(arrayOf(
+            android.Manifest.permission.READ_EXTERNAL_STORAGE,
+            android.Manifest.permission.WRITE_EXTERNAL_STORAGE))
     }
 }

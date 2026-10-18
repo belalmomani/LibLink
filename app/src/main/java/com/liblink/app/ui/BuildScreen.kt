@@ -1,10 +1,14 @@
 package com.liblink.app.ui
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,7 +23,10 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.liblink.app.R
 import com.liblink.app.data.Project
@@ -28,6 +35,7 @@ import com.liblink.app.git.GitManager
 import com.liblink.app.network.GitHubApi
 import com.liblink.app.network.GitHubException
 import com.liblink.app.storage.ProjectStorage
+import com.liblink.app.work.BuildWatchWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
@@ -100,6 +108,9 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
     var msg by remember { mutableStateOf("") }
     var apk by remember { mutableStateOf<File?>(null) }
     var tick by remember { mutableIntStateOf(0) }
+    var errorText by remember { mutableStateOf<String?>(null) }
+    // إذن الإشعارات (أندرويد 13+) لإشعار انتهاء البناء
+    val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     var boost by remember { mutableIntStateOf(0) } // مرات إضافية للفحص بعد التشغيل حتى يظهر التنفيذ الجديد
     val wfExists = remember(tick, workflow) { File(dir, ".github/workflows/$workflow").exists() }
 
@@ -135,11 +146,17 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
 
     fun runBuild() {
         if (!guard()) return
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
         scope.launch {
             busy = true
             msg = try {
+                val startedAt = System.currentTimeMillis()
                 GitHubApi(token).dispatch(parsed!!.first, parsed.second, workflow.trim(), branch.ifBlank { "main" })
                 repo.setWorkflow(project.id, workflow.trim())
+                // مراقبة في الخلفية: يصلك إشعار عند انتهاء البناء
+                BuildWatchWorker.enqueue(ctx, project.id, project.name, parsed.first, parsed.second, workflow.trim(), startedAt)
                 boost = 10; tick++
                 ctx.getString(R.string.build_started)
             } catch (e: Exception) { describe(e) }
@@ -155,6 +172,20 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
             repo.setWorkflow(project.id, workflow.trim())
             msg = ctx.getString(R.string.workflow_created); tick++
         } catch (e: Exception) { msg = describe(e) }
+    }
+
+    // عرض سطور الخطأ فقط من سجل البناء الفاشل
+    fun viewError(run: GitHubApi.Run) {
+        if (!guard()) return
+        scope.launch {
+            busy = true
+            msg = ctx.getString(R.string.loading_log)
+            msg = try {
+                val t = GitHubApi(token).failureSummary(parsed!!.first, parsed.second, run.id)
+                if (t.isBlank()) ctx.getString(R.string.no_error_log) else { errorText = t; "" }
+            } catch (e: Exception) { describe(e) }
+            busy = false
+        }
     }
 
     fun download(run: GitHubApi.Run) {
@@ -250,6 +281,9 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
                                     clipboard.setText(AnnotatedString(r.url)); msg = ctx.getString(R.string.link_copied)
                                 }) { Text(stringResource(R.string.copy_link)) }
                             }
+                            if (r.status == "completed" && r.conclusion == "failure") {
+                                OutlinedButton({ viewError(r) }, enabled = !busy) { Text(stringResource(R.string.view_error)) }
+                            }
                             TextButton({
                                 ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(r.url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                             }) { Text(stringResource(R.string.open_browser)) }
@@ -258,5 +292,23 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
                 }
             }
         }
+    }
+
+    errorText?.let { t ->
+        AlertDialog(
+            onDismissRequest = { errorText = null },
+            title = { Text(stringResource(R.string.build_errors)) },
+            text = {
+                Box(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    Text(t, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+                }
+            },
+            confirmButton = {
+                TextButton({ clipboard.setText(AnnotatedString(t)); msg = ctx.getString(R.string.link_copied) }) {
+                    Text(stringResource(R.string.copy_error))
+                }
+            },
+            dismissButton = { TextButton({ errorText = null }) { Text(stringResource(R.string.close)) } }
+        )
     }
 }
