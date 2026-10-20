@@ -87,9 +87,10 @@ dependencies {
     // إعلانات Start.io — تحقق من أحدث إصدار في لوحة Start.io
     implementation("com.startapp:inapp-sdk:5.0.1")
 
-    // Firebase اختياري
-    if (hasFirebase) {
-        implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
-        implementation("com.google.firebase:firebase-analytics")
-    }
+    // Firebase: المصادقة والمزامنة بين الأجهزة (تعمل عند وجود google-services.json)
+    implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-analytics")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }

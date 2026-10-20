@@ -25,6 +25,7 @@ import com.liblink.app.data.LibItem
 import com.liblink.app.data.LibraryRepository
 import com.liblink.app.data.suggestLibName
 import com.liblink.app.network.GitHubApi
+import com.liblink.app.sync.SyncManager
 
 // اسم التصنيف: الافتراضي مترجم، والمخصص كما كتبه المستخدم
 @Composable
@@ -49,8 +50,8 @@ fun LibraryScreen(share: String? = null, onBack: () -> Unit, onClone: (url: Stri
     val access = rememberAccessGranted()
     val requestAccess = rememberAccessRequester()
     var tick by remember { mutableIntStateOf(0) }
-    val all = remember(tick) { lib.items() }
-    val categories = remember(tick) { lib.categories() }
+    val all = remember(tick, SyncManager.changeCount) { lib.items() }
+    val categories = remember(tick, SyncManager.changeCount) { lib.categories() }
     val missing = remember(tick, access) { if (access) lib.backupMissingCount() else 0 }
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("") } // "" = الكل، "*" = المفضلة، غير ذلك = تصنيف

@@ -7,6 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.liblink.app.sync.SyncManager
 import com.liblink.app.ui.LibLinkRoot
 import com.liblink.app.ui.LibLinkTheme
 
@@ -26,6 +27,12 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         }
+    }
+
+    // كل مرة يُفتح التطبيق: جلب ما تغيّر من أجهزتك الأخرى
+    override fun onResume() {
+        super.onResume()
+        SyncManager.requestNow(this)
     }
 
     override fun onNewIntent(intent: Intent) {

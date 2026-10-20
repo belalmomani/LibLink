@@ -42,13 +42,16 @@ fun SettingsScreen(repo: ProjectRepository, onBack: () -> Unit, onTrash: () -> U
             StepCard(stringResource(R.string.language)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {
-                        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("ar"))
+                        repo.setLanguage("ar"); AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("ar"))
                     }) { Text(stringResource(R.string.lang_ar)) }
                     Button(onClick = {
-                        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
+                        repo.setLanguage("en"); AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
                     }) { Text(stringResource(R.string.lang_en)) }
                 }
             }
+
+            // مزامنة المكتبة والإعدادات بين أجهزتك
+            SyncCard(repo)
 
             StepCard(stringResource(R.string.github_account), stringResource(R.string.github_token_hint)) {
                 OutlinedTextField(user, { user = it; saved = false }, Modifier.fillMaxWidth(),
