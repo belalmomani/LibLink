@@ -1,5 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
+<<<<<<< HEAD
     <string name="app_name">LibLink</string>
     <string name="home_title">My Projects</string>
     <string name="no_projects">No projects yet. Tap + to add one.</string>
@@ -530,4 +530,7 @@
     <string name="sync_undo">Undo last sync changes</string>
     <string name="sync_undo_confirm">Restore the library and settings as they were before the last sync that changed them?</string>
     <string name="sync_undone">%1$d item(s) restored</string>
+=======
+    <string name="app_name">الآفاق القرآنية</string>
+>>>>>>> branch 'main' of https://github.com/belalmomani/LibLink.git
 </resources>
