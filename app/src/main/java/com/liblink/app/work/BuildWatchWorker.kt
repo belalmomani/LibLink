@@ -3,6 +3,7 @@ package com.liblink.app.work
 import android.content.Context
 import androidx.work.*
 import com.liblink.app.data.ProjectRepository
+import com.liblink.app.doctor.BuildDiagnosis
 import com.liblink.app.network.GitHubApi
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -29,7 +30,13 @@ class BuildWatchWorker(private val ctx: Context, params: WorkerParameters) : Cor
                 runCatching { Instant.parse(it.createdAt).toEpochMilli() }.getOrDefault(0L) >= since - 60_000L
             }
             if (run != null && run.status == "completed") {
-                Notifier.buildDone(ctx, pid, name, run.number, run.conclusion == "success")
+                val ok = run.conclusion == "success"
+                // عند الفشل: المرحلة والسبب المحتمل داخل الإشعار نفسه
+                val detail = if (ok) null else runCatching {
+                    val d = BuildDiagnosis.analyze(ctx, api.failureReport(owner, repo, run.id))
+                    d.stage + ": " + d.cause
+                }.getOrNull()
+                Notifier.buildDone(ctx, pid, name, run.number, ok, detail)
                 return Result.success()
             }
             delay(15_000)

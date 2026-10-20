@@ -34,7 +34,11 @@ import com.liblink.app.data.ProjectRepository
 import com.liblink.app.git.GitManager
 import com.liblink.app.network.GitHubApi
 import com.liblink.app.network.GitHubException
+import com.liblink.app.doctor.BuildDiagnosis
+import com.liblink.app.doctor.Diagnosis
 import com.liblink.app.storage.ProjectStorage
+import com.liblink.app.storage.ReleaseStore
+import com.liblink.app.storage.Templates
 import com.liblink.app.work.BuildWatchWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -44,39 +48,14 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
-// قالب workflow جاهز لبناء APK (يُنشأ داخل المشروع ثم يُرفع إلى GitHub)
-private val WORKFLOW_TEMPLATE = """name: Build APK
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.7
-      - name: Build debug APK
-        run: gradle :app:assembleDebug
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/*.apk
-"""
 
-private fun fmtTime(iso: String): String = runCatching {
+internal fun fmtTime(iso: String): String = runCatching {
     ZonedDateTime.ofInstant(Instant.parse(iso), ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
 }.getOrDefault(iso)
 
 // تثبيت APK عبر FileProvider بعد التأكد من إذن التثبيت من مصادر غير معروفة
-private fun installApk(ctx: Context, apk: File): String? {
+internal fun installApk(ctx: Context, apk: File): String? {
     if (Build.VERSION.SDK_INT >= 26 && !ctx.packageManager.canRequestPackageInstalls()) {
         ctx.startActivity(
             Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${ctx.packageName}"))
@@ -93,13 +72,14 @@ private fun installApk(ctx: Context, apk: File): String? {
 }
 
 @Composable
-fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
+fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit, onReleases: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
     val dir = remember(project.path) { File(project.path) }
     val parsed = remember(project.remoteUrl) { GitHubApi.parse(project.remoteUrl) }
     val token = remember { repo.credentials().token }
+    val store = remember { ReleaseStore(ctx) } // سجل الإصدارات
 
     var workflow by remember { mutableStateOf(repo.workflow(project.id)) }
     var branch by remember { mutableStateOf("") }
@@ -108,7 +88,7 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
     var msg by remember { mutableStateOf("") }
     var apk by remember { mutableStateOf<File?>(null) }
     var tick by remember { mutableIntStateOf(0) }
-    var errorText by remember { mutableStateOf<String?>(null) }
+    var diagnosis by remember { mutableStateOf<Diagnosis?>(null) }
     // إذن الإشعارات (أندرويد 13+) لإشعار انتهاء البناء
     val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     var boost by remember { mutableIntStateOf(0) } // مرات إضافية للفحص بعد التشغيل حتى يظهر التنفيذ الجديد
@@ -129,7 +109,10 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
         var extra = boost
         boost = 0
         while (true) {
-            try { runs = GitHubApi(token).runs(parsed.first, parsed.second, workflow) }
+            try {
+                runs = GitHubApi(token).runs(parsed.first, parsed.second, workflow)
+                runs.forEach { store.upsertRun(project.id, it) }
+            }
             catch (e: Exception) { msg = describe(e); break }
             val active = runs.firstOrNull()?.let { it.status != "completed" } == true
             if (!active && extra <= 0) break
@@ -168,21 +151,24 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
         try {
             val f = File(dir, ".github/workflows/${workflow.trim()}")
             f.parentFile?.mkdirs()
-            if (!f.exists()) f.writeText(WORKFLOW_TEMPLATE)
+            if (!f.exists()) f.writeText(Templates.WORKFLOW)
             repo.setWorkflow(project.id, workflow.trim())
             msg = ctx.getString(R.string.workflow_created); tick++
         } catch (e: Exception) { msg = describe(e) }
     }
 
-    // عرض سطور الخطأ فقط من سجل البناء الفاشل
+    // لماذا فشل البناء؟ المرحلة والسبب المحتمل والإجراء المقترح
     fun viewError(run: GitHubApi.Run) {
         if (!guard()) return
         scope.launch {
             busy = true
             msg = ctx.getString(R.string.loading_log)
             msg = try {
-                val t = GitHubApi(token).failureSummary(parsed!!.first, parsed.second, run.id)
-                if (t.isBlank()) ctx.getString(R.string.no_error_log) else { errorText = t; "" }
+                val d = BuildDiagnosis.analyze(ctx, GitHubApi(token).failureReport(parsed!!.first, parsed.second, run.id))
+                store.upsertRun(project.id, run)
+                store.update(project.id, run.id) { it.copy(failReason = d.cause) }
+                diagnosis = d
+                ""
             } catch (e: Exception) { describe(e) }
             busy = false
         }
@@ -211,6 +197,7 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppBar(stringResource(R.string.build_title), onBack, actions = {
+                TextButton(onReleases) { Text(stringResource(R.string.releases_title)) }
                 TextButton({ tick++ }) { Text(stringResource(R.string.refresh)) }
             })
         }
@@ -273,6 +260,8 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
                                 }
                             }
                             Text(fmtTime(r.createdAt), style = MaterialTheme.typography.bodySmall)
+                            if (r.sha.isNotBlank()) Text(stringResource(R.string.rel_commit, r.sha.take(7)) +
+                                if (r.message.isNotBlank()) " · " + r.message else "", style = MaterialTheme.typography.bodySmall)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 if (r.conclusion == "success") {
                                     Button({ download(r) }, enabled = !busy) { Text(stringResource(R.string.download_apk)) }
@@ -294,21 +283,8 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit) {
         }
     }
 
-    errorText?.let { t ->
-        AlertDialog(
-            onDismissRequest = { errorText = null },
-            title = { Text(stringResource(R.string.build_errors)) },
-            text = {
-                Box(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    Text(t, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
-                }
-            },
-            confirmButton = {
-                TextButton({ clipboard.setText(AnnotatedString(t)); msg = ctx.getString(R.string.link_copied) }) {
-                    Text(stringResource(R.string.copy_error))
-                }
-            },
-            dismissButton = { TextButton({ errorText = null }) { Text(stringResource(R.string.close)) } }
-        )
+    diagnosis?.let { d ->
+        DiagnosisDialog(d, onCopy = { clipboard.setText(AnnotatedString(it)); msg = ctx.getString(R.string.link_copied) },
+            onDismiss = { diagnosis = null })
     }
 }

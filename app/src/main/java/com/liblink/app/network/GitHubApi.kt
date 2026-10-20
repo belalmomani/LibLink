@@ -15,12 +15,16 @@ class GitHubApi(private val token: String) {
 
     data class Run(
         val id: Long, val number: Int, val status: String, val conclusion: String?,
-        val url: String, val branch: String, val createdAt: String
+        val url: String, val branch: String, val createdAt: String,
+        val sha: String = "", val message: String = ""
     )
 
-    data class Job(val id: Long, val name: String, val conclusion: String?)
+    data class Job(val id: Long, val name: String, val conclusion: String?, val failedStep: String?)
 
     data class Artifact(val id: Long, val name: String, val size: Long, val expired: Boolean, val downloadUrl: String)
+
+    // نتيجة قراءة سجل المهمة الفاشلة: المهمة والخطوة وأهم سطور الخطأ
+    data class FailureReport(val job: String?, val step: String?, val lines: List<String>)
 
     private fun open(url: String, method: String = "GET", auth: Boolean = true): HttpURLConnection {
         val c = URL(url).openConnection() as HttpURLConnection
@@ -62,15 +66,17 @@ class GitHubApi(private val token: String) {
         } finally { c.disconnect() }
     }
 
-    suspend fun runs(owner: String, repo: String, workflow: String): List<Run> = withContext(Dispatchers.IO) {
-        val j = getJson("https://api.github.com/repos/$owner/$repo/actions/workflows/$workflow/runs?per_page=5")
+    suspend fun runs(owner: String, repo: String, workflow: String, perPage: Int = 5): List<Run> = withContext(Dispatchers.IO) {
+        val j = getJson("https://api.github.com/repos/$owner/$repo/actions/workflows/$workflow/runs?per_page=$perPage")
         val arr = j.optJSONArray("workflow_runs") ?: return@withContext emptyList()
         (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
             Run(
                 o.getLong("id"), o.optInt("run_number"), o.optString("status"),
                 if (o.isNull("conclusion")) null else o.optString("conclusion"),
-                o.optString("html_url"), o.optString("head_branch"), o.optString("created_at")
+                o.optString("html_url"), o.optString("head_branch"), o.optString("created_at"),
+                o.optString("head_sha"),
+                o.optJSONObject("head_commit")?.optString("message")?.lineSequence()?.firstOrNull().orEmpty()
             )
         }
     }
@@ -121,39 +127,53 @@ class GitHubApi(private val token: String) {
         val arr = j.optJSONArray("jobs") ?: return@withContext emptyList()
         (0 until arr.length()).map {
             val o = arr.getJSONObject(it)
-            Job(o.getLong("id"), o.optString("name"), if (o.isNull("conclusion")) null else o.optString("conclusion"))
+            Job(o.getLong("id"), o.optString("name"),
+                if (o.isNull("conclusion")) null else o.optString("conclusion"), failedStepOf(o))
         }
     }
 
-    // أهم سطور الخطأ من سجل المهمة (Job) الفاشلة، بدل تنزيل السجل كاملًا
-    suspend fun failureSummary(owner: String, repo: String, runId: Long): String = withContext(Dispatchers.IO) {
-        val failed = jobs(owner, repo, runId).filter { it.conclusion == "failure" }
-        val out = StringBuilder()
-        for (job in failed) {
-            var c = open("https://api.github.com/repos/$owner/$repo/actions/jobs/${job.id}/logs")
-            try {
-                check(c)
-                val stream = if (c.responseCode == 302) {
-                    val loc = c.getHeaderField("Location") ?: continue
-                    c.disconnect()
-                    c = open(loc, auth = false) // الرابط الموقّع لا يحتاج Token
-                    check(c)
-                    c.inputStream
-                } else c.inputStream
-                out.append("[").append(job.name).append("]\n")
-                    .append(extractErrors(stream.bufferedReader().lineSequence())).append("\n")
-            } finally { c.disconnect() }
+    // اسم أول خطوة فشلت داخل المهمة (مثل: Build debug APK)
+    private fun failedStepOf(job: JSONObject): String? {
+        val steps = job.optJSONArray("steps") ?: return null
+        for (i in 0 until steps.length()) {
+            val st = steps.getJSONObject(i)
+            if (st.optString("conclusion") == "failure") return st.optString("name")
         }
-        out.toString().trim()
+        return null
+    }
+
+    // تقرير الفشل: المهمة الفاشلة وخطوتها وأهم سطور الخطأ من سجلها (بدون تنزيل السجل كاملًا)
+    suspend fun failureReport(owner: String, repo: String, runId: Long): FailureReport = withContext(Dispatchers.IO) {
+        val job = jobs(owner, repo, runId).firstOrNull { it.conclusion == "failure" }
+            ?: return@withContext FailureReport(null, null, emptyList())
+        FailureReport(job.name, job.failedStep, readJobErrors(owner, repo, job.id))
+    }
+
+    private fun readJobErrors(owner: String, repo: String, jobId: Long): List<String> {
+        var c = open("https://api.github.com/repos/$owner/$repo/actions/jobs/$jobId/logs")
+        try {
+            check(c)
+            val stream = if (c.responseCode == 302) {
+                val loc = c.getHeaderField("Location") ?: return emptyList()
+                c.disconnect()
+                c = open(loc, auth = false) // الرابط الموقّع لا يحتاج Token
+                check(c)
+                c.inputStream
+            } else c.inputStream
+            return extractErrorLines(stream.bufferedReader().lineSequence())
+        } finally { c.disconnect() }
     }
 
     private val errorRegex = Regex(
         "(^e: |error:|\\bERROR\\b|FAILED|What went wrong|Execution failed|Unresolved reference|" +
-            "Could not resolve|Caused by|BUILD FAILED|##\\[error\\])", RegexOption.IGNORE_CASE
+            "Could not resolve|Could not find|Caused by|BUILD FAILED|##\\[error\\]|OutOfMemory|Java heap|" +
+            "Duplicate (class|resources|entry)|Manifest merger|No files were found|Unsupported class file|" +
+            "google-services|No matching client|AAPT|resource linking|was not found|not found in root project|" +
+            "Keystore|SDK location|Unable to resolve action|Resource not accessible)", RegexOption.IGNORE_CASE
     )
     private val timeRegex = Regex("^\\d{4}-\\d{2}-\\d{2}T[\\d:.]+Z ")
 
-    private fun extractErrors(lines: Sequence<String>): String {
+    private fun extractErrorLines(lines: Sequence<String>): List<String> {
         val kept = LinkedHashSet<String>()
         val tail = ArrayDeque<String>()
         var extra = 0
@@ -171,7 +191,7 @@ class GitHubApi(private val token: String) {
             }
             if (kept.size >= 80) break
         }
-        return (if (kept.isEmpty()) tail.toList() else kept.toList()).joinToString("\n")
+        return if (kept.isEmpty()) tail.toList() else kept.toList()
     }
 
     companion object {

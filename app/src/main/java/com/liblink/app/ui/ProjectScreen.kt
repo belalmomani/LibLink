@@ -49,6 +49,7 @@ fun ProjectScreen(
     onFiles: () -> Unit,
     onBranches: () -> Unit,
     onBuild: () -> Unit,
+    onDoctor: () -> Unit,
     onRemoved: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -275,6 +276,7 @@ fun ProjectScreen(
                         MenuItem(R.string.m_rebase, R.string.h_rebase) { dlg = Dlg.Rebase }
                         MenuItem(R.string.m_cherry, R.string.h_cherry) { dlg = Dlg.CherryPick }
                         MenuItem(R.string.m_branches, R.string.h_branches) { onBranches() }
+                        MenuItem(R.string.m_doctor, R.string.h_doctor) { onDoctor() }
                         MenuItem(R.string.m_build_apk, R.string.h_build_apk) { onBuild() }
                         MenuItem(R.string.m_save_lib, R.string.h_save_lib) { saveToLibrary() }
                         MenuItem(R.string.m_diff, R.string.h_diff) {
@@ -328,6 +330,10 @@ fun ProjectScreen(
             // بناء APK على خوادم GitHub من الهاتف
             OutlinedButton(onClick = onBuild, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.build_apk))
+            }
+            // مركز التشخيص: فحص المشروع وخطة إنقاذ مع معاينة الإصلاح
+            OutlinedButton(onClick = onDoctor, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.doctor_btn))
             }
             Text(stringResource(R.string.steps_title), style = MaterialTheme.typography.titleLarge)
 

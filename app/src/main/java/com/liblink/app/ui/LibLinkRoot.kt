@@ -27,6 +27,8 @@ sealed interface Screen {
     data class Editor(val id: String, val path: String) : Screen
     data class Branches(val id: String) : Screen
     data class Build(val id: String) : Screen
+    data class Doctor(val id: String) : Screen
+    data class Releases(val id: String) : Screen
 }
 
 @Composable
@@ -77,6 +79,8 @@ fun LibLinkRoot(
             is Screen.Files -> Screen.Project(s.id)
             is Screen.Branches -> Screen.Project(s.id)
             is Screen.Build -> Screen.Project(s.id)
+            is Screen.Doctor -> Screen.Project(s.id)
+            is Screen.Releases -> Screen.Build(s.id)
             is Screen.Trash -> s.from
             else -> Screen.Home
         }
@@ -108,6 +112,7 @@ fun LibLinkRoot(
                 onFiles = { screen = Screen.Files(s.id) },
                 onBranches = { screen = Screen.Branches(s.id) },
                 onBuild = { screen = Screen.Build(s.id) },
+                onDoctor = { screen = Screen.Doctor(s.id) },
                 onRemoved = { version++; screen = Screen.Home })
         }
         is Screen.Files -> {
@@ -124,7 +129,18 @@ fun LibLinkRoot(
         is Screen.Build -> {
             val p = repo.find(s.id)
             if (p == null) screen = Screen.Home
-            else BuildScreen(p, repo, onBack = { screen = Screen.Project(s.id) })
+            else BuildScreen(p, repo, onBack = { screen = Screen.Project(s.id) },
+                onReleases = { screen = Screen.Releases(s.id) })
+        }
+        is Screen.Doctor -> {
+            val p = repo.find(s.id)
+            if (p == null) screen = Screen.Home
+            else DoctorScreen(p, repo, onBack = { screen = Screen.Project(s.id) })
+        }
+        is Screen.Releases -> {
+            val p = repo.find(s.id)
+            if (p == null) screen = Screen.Home
+            else ReleasesScreen(p, repo, onBack = { screen = Screen.Build(s.id) })
         }
         is Screen.Branches -> {
             val p = repo.find(s.id)

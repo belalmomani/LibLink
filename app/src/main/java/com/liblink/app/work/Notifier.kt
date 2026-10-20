@@ -27,7 +27,7 @@ object Notifier {
         }
     }
 
-    fun buildDone(ctx: Context, projectId: String, name: String, number: Int, ok: Boolean) {
+    fun buildDone(ctx: Context, projectId: String, name: String, number: Int, ok: Boolean, detail: String? = null) {
         ensureChannel(ctx)
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -37,10 +37,12 @@ object Notifier {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pi = PendingIntent.getActivity(ctx, projectId.hashCode(), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val text = detail ?: ctx.getString(if (ok) R.string.notif_success_text else R.string.notif_failed_text)
         val n = NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_notify)
             .setContentTitle(ctx.getString(if (ok) R.string.notif_success else R.string.notif_failed, name, number))
-            .setContentText(ctx.getString(if (ok) R.string.notif_success_text else R.string.notif_failed_text))
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(pi)
             .setAutoCancel(true)
             .build()

@@ -279,4 +279,9 @@ class GitManager(private val creds: Credentials = Credentials("", "", "", "")) {
             "ATTACHED"
         }
     }
+
+    // استعادة ملفات من commit أو فرع (HEAD أو origin/main) إلى مجلد العمل
+    suspend fun restorePaths(dir: File, ref: String, paths: List<String>) = withContext(Dispatchers.IO) {
+        Git.open(dir).use { it.checkout().setStartPoint(ref).addPaths(paths).call() }
+    }
 }
