@@ -1,5 +1,0 @@
-# يمنع تنزيل ملف الإعدادات (فيه السرّ) من المتصفح
-<FilesMatch "^config(\.example)?\.php$">
-    Require all denied
-</FilesMatch>
-Options -Indexes
