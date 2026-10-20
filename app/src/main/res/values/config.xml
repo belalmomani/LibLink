@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ضع هنا App ID الخاص بك من لوحة Start.io -->
+    <string name="start_io_app_id" translatable="false">209687203</string>
+</resources>

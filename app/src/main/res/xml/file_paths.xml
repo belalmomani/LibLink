@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- لتثبيت APK المُنزَّل من Download/LibLink أو من مجلد التطبيق -->
+    <external-path name="external" path="." />
+    <external-files-path name="app_external" path="." />
+</paths>
