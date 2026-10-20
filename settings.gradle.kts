@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "LibLink"
+rootProject.name = "QuranicHorizons"
 include(":app")

@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- هلال ذهبي فوق أفق هادئ -->
+    <path android:fillColor="#FFD9A84F"
+        android:pathData="M53.52,29.33 A22,22 0 1 0 65.05,61.00 A19,19 0 1 1 53.52,29.33 Z" />
+    <path android:fillColor="#FF0A1638"
+        android:pathData="M18,86 L40,78 L56,84 L74,76 L90,82 L90,98 L18,98 Z" />
+    <path android:fillColor="#33D9A84F"
+        android:pathData="M18,88 L90,88 L90,89 L18,89 Z" />
+</vector>

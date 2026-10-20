@@ -1,15 +1,17 @@
-# LibLink
-Android Git client (JGit) — Arabic/English, Start.io ads, optional Firebase.
+# الآفاق القرآنية — Quranic Horizons
+رحلة بصرية في رحاب القرآن الكريم. تتغير المشاهد مع كل آية وفق تفسير موثوق، مع تلاوة الشيخ ياسر الدوسري (بعد التحقق من الترخيص).
 
-1. Put your Start.io App ID in `app/src/main/res/values/config.xml`.
-2. (Optional) put `google-services.json` in `app/` to enable Firebase.
-3. Build: Android Studio, or push to GitHub and download the APK from Actions → Build APK.
-4. In the app: Settings → add GitHub username + Token (repo scope).
+## الحالة
+المرحلة 1: الأساس + سورة الناس (معاينة قيد المراجعة). راجع `docs/STATUS.md`.
 
-## Storage
-Organized projects: `Download/LibLink/<project>` (needs all-files access, otherwise the app folder).
-Manual: pick any parent folder; each project gets its own sub-folder.
+## البنية
+- `app/` تطبيق أندرويد (Kotlin + Compose، بلا مكتبات غير لازمة).
+- `content/bootstrap/` وحدات المحتوى (نص، تفسير، مشاهد) + `catalog.json` ببصمات SHA-256.
+- `tools/build_content.py` يبني المحتوى من مصادر حرفية؛ `tools/validate_content.py` يتحقق منه.
+- `.github/workflows/build.yml` تحقق المحتوى + اختبارات JVM + بناء APK (لا حاجة لـ Android Studio).
 
-## Menu (like MGit)
-Pull, Push, Add all to stage, Commit, Reset (HARD), Merge, Fetch, Rebase, Cherry Pick, Diff,
-New File, New Directory, Add Remote, Remove Remote, Delete, Raw config, Config + in-app file browser.
+## البناء
+يتم على GitHub Actions: ادفع إلى المستودع وحمّل APK من Artifacts. محليًا: `gradle :app:testDebugUnitTest :app:assembleDebug` (Gradle 8.9، JDK 17).
+
+## قواعد المحتوى
+لا تعديل لنص القرآن؛ التفسير نقل حرفي مع النسبة والحالة؛ المشاهد تُصمَّم وتُراجَع مسبقًا؛ لا تُعلَّم سورة «جاهزة» قبل اكتمال النص والتفسير والمشاهد والتلاوة والاختبار. لا أسرار في المستودع.

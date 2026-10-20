@@ -1,0 +1,89 @@
+{
+ "formatVersion": 1,
+ "surah": 114,
+ "moduleVersion": "0.1.0",
+ "nameAr": "الناس",
+ "ayahCount": 6,
+ "review": {
+  "status": "draft",
+  "blockers": [
+   "ترخيص التلاوة غير موثّق: روابط EveryAyah بلا ترخيص معلن، وملف m4a الذي أرسلته بلا بيانات قارئ أو ترخيص (وسوم الملف تدل على تنزيل من منصة بث)؛ لا يُعاد توزيعه قبل التحقق كتابيًا",
+   "مراجعة نسبة نصوص التفاسير وحقوقها (attributionReview = pending)",
+   "مراجعتك البصرية للقطات الست (review.status = draft)",
+   "دقة صور المشاهد منخفضة (n1=415x440، n2=418x440، n3=413x440، n4=415x362، n5=418x362، n6=409x362): قُصّت من لوحة مجمَّعة ~1254px؛ المطلوب صور منفصلة بعرض ≥ 1080 px بلا نص ولا أرقام",
+   "نص الآية داخل الصور المرسلة غير صالح (آية 2 مكتوبة «مبلك»)؛ قُصّ، ويُرسم نص الآية من Tanzil فقط — الصور النهائية بلا أي نص",
+   "لقطة الآية 4 تُظهر الوسوسة فقط، و«يختفي عند ذكر الله» غير مصوَّر (لقطة ثانية مطلوبة)",
+   "مصدر الصور وحقوقها: صور مولَّدة قدّمها صاحب المشروع؛ يلزم توثيق الأداة وشروط الاستخدام قبل التوزيع",
+   "هل ملف الآية الأولى في التسجيل يتضمن البسملة؟ يلزم الاستماع والتحقق قبل ضبط البداية",
+   "التوقيت: اقتُرحت نقاط تقسيم آلية لملف m4a (7 مقاطع) في docs/audio/an-nas-cues.draft.json، لكن لا يُعرف أي مقطع هو أي آية (وهل الأول بسملة) قبل استماعك؛ ومدد الملفات في module.json ما زالت null"
+  ]
+ },
+ "basmala": "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
+ "text": {
+  "source": "Tanzil Uthmani",
+  "sha256OfSourceLines": "941b3251d4af30576e981d083bf48aa5743dee0b06550ba20bbe61f864a8510c",
+  "note": "سطر الآية 1 في المصدر يبدأ بالبسملة وقد فُصلت عرضًا فقط"
+ },
+ "ayahs": [
+  {
+   "number": 1,
+   "text": "قُلْ أَعُوذُ بِرَبِّ ٱلنَّاسِ",
+   "sceneId": "n-images",
+   "audio": {
+    "url": "https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/114001.mp3",
+    "durationMs": null,
+    "status": "license_unverified"
+   }
+  },
+  {
+   "number": 2,
+   "text": "مَلِكِ ٱلنَّاسِ",
+   "sceneId": "n-images",
+   "audio": {
+    "url": "https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/114002.mp3",
+    "durationMs": null,
+    "status": "license_unverified"
+   }
+  },
+  {
+   "number": 3,
+   "text": "إِلَٰهِ ٱلنَّاسِ",
+   "sceneId": "n-images",
+   "audio": {
+    "url": "https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/114003.mp3",
+    "durationMs": null,
+    "status": "license_unverified"
+   }
+  },
+  {
+   "number": 4,
+   "text": "مِن شَرِّ ٱلْوَسْوَاسِ ٱلْخَنَّاسِ",
+   "sceneId": "n-images",
+   "audio": {
+    "url": "https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/114004.mp3",
+    "durationMs": null,
+    "status": "license_unverified"
+   }
+  },
+  {
+   "number": 5,
+   "text": "ٱلَّذِى يُوَسْوِسُ فِى صُدُورِ ٱلنَّاسِ",
+   "sceneId": "n-images",
+   "audio": {
+    "url": "https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/114005.mp3",
+    "durationMs": null,
+    "status": "license_unverified"
+   }
+  },
+  {
+   "number": 6,
+   "text": "مِنَ ٱلْجِنَّةِ وَٱلنَّاسِ",
+   "sceneId": "n-images",
+   "audio": {
+    "url": "https://everyayah.com/data/Yasser_Ad-Dussary_128kbps/114006.mp3",
+    "durationMs": null,
+    "status": "license_unverified"
+   }
+  }
+ ]
+}
