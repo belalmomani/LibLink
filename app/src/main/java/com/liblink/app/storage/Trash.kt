@@ -1,9 +1,12 @@
 package com.liblink.app.storage
 
 import android.content.Context
+import com.liblink.app.data.Project
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 import kotlin.math.ceil
 
 // سلة محذوفات مؤقتة: الملفات المحذوفة أو المستبدلة تبقى 3 أيام ثم تُحذف تلقائيًا
@@ -66,4 +69,50 @@ object Trash {
 
     fun daysLeft(e: Entry): Int =
         ceil((e.at + KEEP_MS - System.currentTimeMillis()) / 86_400_000.0).toInt().coerceAtLeast(0)
+
+    // الاستعادة كملف ZIP: يحفظ المحذوف كله بمجلداته الأصلية داخل ملف واحد.
+    // الملفات تُوضع تحت مجلد باسم المشروع، فيمكن استيرادها بـ "استيراد تحديث ZIP" لإعادة الكل دفعة واحدة
+    fun exportZip(entries: List<Entry>, projects: List<Project>, out: File): Int {
+        out.parentFile?.mkdirs()
+        val used = HashSet<String>()
+        // اسم غير مكرر عند وجود عدة نسخ محذوفة لنفس الملف: a.txt ثم a(2).txt
+        fun unique(path: String): String {
+            if (used.add(path)) return path
+            val slash = path.lastIndexOf('/')
+            val dot = path.lastIndexOf('.')
+            val hasExt = dot > slash + 1
+            val base = if (hasExt) path.substring(0, dot) else path
+            val ext = if (hasExt) path.substring(dot) else ""
+            var i = 2
+            while (true) {
+                val c = "$base($i)$ext"
+                if (used.add(c)) return c
+                i++
+            }
+        }
+        ZipOutputStream(out.outputStream().buffered()).use { zip ->
+            for (e in entries.sortedByDescending { it.at }) {
+                val abs = e.orig.absolutePath
+                val proj = projects.firstOrNull { abs.startsWith(it.path.trimEnd('/') + "/") }
+                val rel = if (proj != null)
+                    ProjectStorage.safeName(proj.name) + "/" + abs.removePrefix(proj.path.trimEnd('/') + "/")
+                else "restored/" + e.orig.name
+                val base = unique(rel)
+                if (e.item.isDirectory) {
+                    zip.putNextEntry(ZipEntry("$base/")); zip.closeEntry()
+                    e.item.walkTopDown().forEach { f ->
+                        val r = f.relativeTo(e.item).path.replace('\\', '/')
+                        if (r.isEmpty()) return@forEach
+                        if (f.isDirectory) { zip.putNextEntry(ZipEntry("$base/$r/")); zip.closeEntry() }
+                        else { zip.putNextEntry(ZipEntry("$base/$r")); f.inputStream().use { it.copyTo(zip) }; zip.closeEntry() }
+                    }
+                } else {
+                    zip.putNextEntry(ZipEntry(base))
+                    e.item.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
+        }
+        return entries.size
+    }
 }

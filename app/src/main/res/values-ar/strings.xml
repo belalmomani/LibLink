@@ -530,4 +530,19 @@
     <string name="sync_undo">تراجع عن تغييرات آخر مزامنة</string>
     <string name="sync_undo_confirm">استعادة المكتبة والإعدادات كما كانت قبل آخر مزامنة غيّرتها؟</string>
     <string name="sync_undone">تمت استعادة %1$d عنصر</string>
+    <string name="trash_zip_all">حفظ الكل كملف ZIP</string>
+    <string name="trash_zip_one">كملف ZIP</string>
+    <string name="trash_zip_done">تم إنشاء ملف ZIP فيه %1$d عنصر بمجلداتها: %2$s</string>
+    <string name="trash_zip_hint">المجلدات محفوظة داخل الملف. استورده بـ \"استيراد تحديث ZIP\" لإعادة كل شيء بمجلداته، أو شاركه.</string>
+    <string name="trash_share">مشاركة ملف ZIP</string>
+    <string name="workflow_found">وُجد %1$d ملف workflow في المشروع</string>
+    <string name="workflow_other">اسم ملف آخر…</string>
+    <string name="wf_manual_yes">تشغيل يدوي: نعم</string>
+    <string name="wf_manual_no">تشغيل يدوي: لا</string>
+    <string name="wf_builds_yes">يبني APK</string>
+    <string name="wf_builds_no">لا يبني APK</string>
+    <string name="wf_push">يعمل عند Push</string>
+    <string name="wf_view">عرض محتوى الملف</string>
+    <string name="wf_not_local">هذا الملف غير موجود في مجلد المشروع. ربما هو على GitHub فقط.</string>
+    <string name="workflow_no_manual">لا يمكن تشغيل هذا الـ workflow من التطبيق لأنه بلا workflow_dispatch. اختر ملفًا آخر أو أضف workflow_dispatch تحت on:</string>
 </resources>

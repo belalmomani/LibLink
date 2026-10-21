@@ -39,6 +39,8 @@ import com.liblink.app.doctor.Diagnosis
 import com.liblink.app.storage.ProjectStorage
 import com.liblink.app.storage.ReleaseStore
 import com.liblink.app.storage.Templates
+import com.liblink.app.storage.WorkflowInfo
+import com.liblink.app.storage.WorkflowScan
 import com.liblink.app.work.BuildWatchWorker
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -93,6 +95,19 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit, o
     val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     var boost by remember { mutableIntStateOf(0) } // مرات إضافية للفحص بعد التشغيل حتى يظهر التنفيذ الجديد
     val wfExists = remember(tick, workflow) { File(dir, ".github/workflows/$workflow").exists() }
+    // ملفات workflows الموجودة في المشروع مع محتوى كل ملف
+    val workflows = remember(tick) { WorkflowScan.scan(dir) }
+    val current = workflows.firstOrNull { it.file == workflow }
+    val canRun = current?.manual != false
+    var pickOpen by remember { mutableStateOf(false) }
+    var typeOther by remember { mutableStateOf(false) }
+    var showContent by remember { mutableStateOf(false) }
+    // إن لم يوجد الملف المحفوظ نختار تلقائيًا أنسب ملف: قابل للتشغيل اليدوي ويبني APK
+    LaunchedEffect(workflows) {
+        if (workflows.isNotEmpty() && workflows.none { it.file == workflow }) {
+            workflow = (workflows.firstOrNull { it.manual && it.builds } ?: workflows.first()).file
+        }
+    }
 
     fun describe(e: Exception): String = when {
         e is GitHubException && e.code == 404 -> ctx.getString(R.string.api_404)
@@ -213,8 +228,39 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit, o
             )
             Text(stringResource(R.string.workflow_hint), style = MaterialTheme.typography.bodySmall)
 
-            OutlinedTextField(workflow, { workflow = it }, Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.workflow_file)) }, singleLine = true)
+            if (workflows.isEmpty()) {
+                OutlinedTextField(workflow, { workflow = it }, Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.workflow_file)) }, singleLine = true)
+            } else {
+                Text(stringResource(R.string.workflow_found, workflows.size), style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary)
+                // اختيار الملف من القائمة: كل ملف مقترن بملخص محتواه
+                Box {
+                    OutlinedButton({ pickOpen = true }, Modifier.fillMaxWidth()) { Text("$workflow  \u25BE") }
+                    DropdownMenu(pickOpen, { pickOpen = false }) {
+                        workflows.forEach { w ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(w.file, style = MaterialTheme.typography.titleSmall)
+                                        Text(workflowSummary(w), style = MaterialTheme.typography.bodySmall)
+                                    }
+                                },
+                                onClick = { workflow = w.file; repo.setWorkflow(project.id, w.file); pickOpen = false }
+                            )
+                        }
+                        DropdownMenuItem({ Text(stringResource(R.string.workflow_other)) }, { pickOpen = false; typeOther = true })
+                    }
+                }
+                val w = current
+                if (w == null) Text(stringResource(R.string.wf_not_local), style = MaterialTheme.typography.bodySmall)
+                else StepCard(w.file, w.name.ifBlank { "—" }) {
+                    Text(workflowSummary(w), style = MaterialTheme.typography.bodySmall)
+                    if (!w.manual) Text(stringResource(R.string.workflow_no_manual), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error)
+                    OutlinedButton({ showContent = true }) { Text(stringResource(R.string.wf_view)) }
+                }
+            }
 
             if (!wfExists) {
                 StepCard(stringResource(R.string.create_workflow), stringResource(R.string.workflow_missing)) {
@@ -222,7 +268,7 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit, o
                 }
             }
 
-            Button(onClick = { runBuild() }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { runBuild() }, enabled = !busy && canRun, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.run_build))
             }
             Busy(busy)
@@ -283,8 +329,23 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit, o
         }
     }
 
+    if (showContent) InfoDialog(workflow, current?.content.orEmpty()) { showContent = false }
+    if (typeOther) {
+        FieldsDialog(stringResource(R.string.workflow_other), listOf(stringResource(R.string.workflow_file)), listOf(workflow),
+            onConfirm = { v -> if (v[0].isNotBlank()) workflow = v[0].trim(); typeOther = false },
+            onDismiss = { typeOther = false })
+    }
+
     diagnosis?.let { d ->
         DiagnosisDialog(d, onCopy = { clipboard.setText(AnnotatedString(it)); msg = ctx.getString(R.string.link_copied) },
             onDismiss = { diagnosis = null })
     }
 }
+
+// ملخص محتوى ملف workflow: تشغيل يدوي؟ يبني APK؟ يعمل عند Push؟
+@Composable
+private fun workflowSummary(w: WorkflowInfo): String = listOf(
+    stringResource(if (w.manual) R.string.wf_manual_yes else R.string.wf_manual_no),
+    stringResource(if (w.builds) R.string.wf_builds_yes else R.string.wf_builds_no),
+    if (w.onPush) stringResource(R.string.wf_push) else ""
+).filter { it.isNotEmpty() }.joinToString(" · ")

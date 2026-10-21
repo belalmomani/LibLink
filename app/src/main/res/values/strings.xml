@@ -530,4 +530,19 @@
     <string name="sync_undo">Undo last sync changes</string>
     <string name="sync_undo_confirm">Restore the library and settings as they were before the last sync that changed them?</string>
     <string name="sync_undone">%1$d item(s) restored</string>
+    <string name="trash_zip_all">Save all as ZIP</string>
+    <string name="trash_zip_one">As ZIP</string>
+    <string name="trash_zip_done">ZIP created with %1$d item(s) and their folders: %2$s</string>
+    <string name="trash_zip_hint">The folders are kept inside the ZIP. Import it with \"Import ZIP update\" to restore everything with its folders, or share it.</string>
+    <string name="trash_share">Share the ZIP</string>
+    <string name="workflow_found">Found %1$d workflow file(s) in the project</string>
+    <string name="workflow_other">Other file name…</string>
+    <string name="wf_manual_yes">Manual run: yes</string>
+    <string name="wf_manual_no">Manual run: no</string>
+    <string name="wf_builds_yes">Builds an APK</string>
+    <string name="wf_builds_no">No APK build step</string>
+    <string name="wf_push">Runs on push</string>
+    <string name="wf_view">View file content</string>
+    <string name="wf_not_local">This file is not in the project folder. It may exist only on GitHub.</string>
+    <string name="workflow_no_manual">This workflow cannot be started from the app because it has no workflow_dispatch. Choose another file, or add workflow_dispatch under on:</string>
 </resources>
