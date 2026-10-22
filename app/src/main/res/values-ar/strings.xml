@@ -545,4 +545,35 @@
     <string name="wf_view">عرض محتوى الملف</string>
     <string name="wf_not_local">هذا الملف غير موجود في مجلد المشروع. ربما هو على GitHub فقط.</string>
     <string name="workflow_no_manual">لا يمكن تشغيل هذا الـ workflow من التطبيق لأنه بلا workflow_dispatch. اختر ملفًا آخر أو أضف workflow_dispatch تحت on:</string>
+    <string name="undo_title">التراجع عن آخر عملية</string>
+    <string name="undo_btn">التراجع عن آخر عملية</string>
+    <string name="undo_apply">تراجع</string>
+    <string name="undo_note">الملفات التي أنشأتها العملية تنتقل إلى سلة المحذوفات، والملفات التي استبدلتها أو حذفتها تُستعاد من السلة (تبقى 3 أيام).</string>
+    <string name="undo_note_short">إن كان هذا خطأ فيمكنك التراجع عنه من شاشة المشروع: التراجع عن آخر عملية.</string>
+    <string name="undo_pv_prev">النسخة السابقة</string>
+    <string name="undo_done">تم التراجع: %1$d عنصر أُعيد، و%2$d تُخطي (لم يعد متاحًا)</string>
+    <string name="undo_nothing">لا توجد عملية للتراجع عنها</string>
+    <string name="op_zip">تحديث ZIP (%1$d ملف)</string>
+    <string name="op_import">استيراد (%1$d ملف)</string>
+    <string name="op_create">إنشاء %1$s</string>
+    <string name="op_rename">إعادة تسمية %1$s</string>
+    <string name="op_copy">نسخ %1$s</string>
+    <string name="op_delete">حذف %1$s</string>
+    <string name="op_restore">استعادة %1$s</string>
+    <string name="op_doctor">إصلاح: %1$s</string>
+    <string name="zip_apply_anyway">تطبيق رغم التحذير</string>
+    <string name="rv_title_ok">يبدو متوافقًا مع هذا المشروع</string>
+    <string name="rv_title_big">فرق كبير: تحقق من الإصدار</string>
+    <string name="rv_title_old">يبدو أنه إصدار أقدم</string>
+    <string name="rv_title_app">يبدو أنه تطبيق مختلف</string>
+    <string name="rv_adv_ok">الـ ZIP يتطابق مع المشروع بدرجة جيدة.</string>
+    <string name="rv_adv_big">ملفات كثيرة مختلفة. تأكد أنه الإصدار الذي تريده قبل التطبيق.</string>
+    <string name="rv_adv_old">يبدو الـ ZIP أقدم من ملفاتك، وقد يستبدل عملًا أحدث. النسخ القديمة تذهب للسلة ويمكنك التراجع.</string>
+    <string name="rv_adv_app">تبدو هذه الملفات لتطبيق أو مشروع آخر. ألغِ العملية ما لم تكن متأكدًا.</string>
+    <string name="rv_overlap">%1$d%% من ملفات الـ ZIP موجودة في المشروع بالمسار نفسه.</string>
+    <string name="rv_counts">مطابق: %1$d · معدّل: %2$d · جديد: %3$d · موجود في المشروع فقط: %4$d</string>
+    <string name="rv_older">%1$d من %2$d ملف معدّل أقدم داخل الـ ZIP منه في مشروعك.</string>
+    <string name="rv_heavy">ملفات تغيّر حجمها كثيرًا: %1$s</string>
+    <string name="rv_id">الهوية (%1$s): الـ ZIP = %2$s · المشروع = %3$s</string>
+    <string name="rv_version">الإصدار: الـ ZIP %1$s · المشروع %2$s</string>
 </resources>

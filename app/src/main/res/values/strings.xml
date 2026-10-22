@@ -545,4 +545,35 @@
     <string name="wf_view">View file content</string>
     <string name="wf_not_local">This file is not in the project folder. It may exist only on GitHub.</string>
     <string name="workflow_no_manual">This workflow cannot be started from the app because it has no workflow_dispatch. Choose another file, or add workflow_dispatch under on:</string>
+    <string name="undo_title">Undo last operation</string>
+    <string name="undo_btn">Undo last operation</string>
+    <string name="undo_apply">Undo</string>
+    <string name="undo_note">Files the operation created move to the recycle bin. Files it replaced or deleted are restored from the recycle bin (kept 3 days).</string>
+    <string name="undo_note_short">If this is a mistake you can undo it from the project screen: Undo last operation.</string>
+    <string name="undo_pv_prev">previous version</string>
+    <string name="undo_done">Undone: %1$d item(s) reverted, %2$d skipped (no longer available)</string>
+    <string name="undo_nothing">Nothing to undo</string>
+    <string name="op_zip">ZIP update (%1$d files)</string>
+    <string name="op_import">Import (%1$d files)</string>
+    <string name="op_create">Create %1$s</string>
+    <string name="op_rename">Rename %1$s</string>
+    <string name="op_copy">Copy %1$s</string>
+    <string name="op_delete">Delete %1$s</string>
+    <string name="op_restore">Restore %1$s</string>
+    <string name="op_doctor">Fix: %1$s</string>
+    <string name="zip_apply_anyway">Apply anyway</string>
+    <string name="rv_title_ok">Looks consistent with this project</string>
+    <string name="rv_title_big">Big difference: check the version</string>
+    <string name="rv_title_old">This looks like an OLDER version</string>
+    <string name="rv_title_app">This looks like a DIFFERENT app</string>
+    <string name="rv_adv_ok">The ZIP matches the project well.</string>
+    <string name="rv_adv_big">Many files differ. Make sure this is the version you want before applying.</string>
+    <string name="rv_adv_old">The ZIP seems older than your files, so applying may overwrite newer work. Old copies go to the recycle bin and you can undo.</string>
+    <string name="rv_adv_app">These files seem to belong to another app or project. Cancel unless you are sure.</string>
+    <string name="rv_overlap">%1$d%% of the ZIP files already exist in the project (same path).</string>
+    <string name="rv_counts">Identical: %1$d · Changed: %2$d · New: %3$d · Only in the project: %4$d</string>
+    <string name="rv_older">%1$d of %2$d changed files are older inside the ZIP than in your project.</string>
+    <string name="rv_heavy">Heavily changed files: %1$s</string>
+    <string name="rv_id">Identity (%1$s): ZIP = %2$s · project = %3$s</string>
+    <string name="rv_version">Version: ZIP %1$s · project %2$s</string>
 </resources>

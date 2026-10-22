@@ -7,6 +7,8 @@ import com.liblink.app.data.Project
 import com.liblink.app.data.ProjectRepository
 import com.liblink.app.git.GitManager
 import com.liblink.app.network.GitHubApi
+import com.liblink.app.storage.OpAction
+import com.liblink.app.storage.OpJournal
 import com.liblink.app.storage.Templates
 import com.liblink.app.storage.Trash
 import kotlinx.coroutines.Dispatchers
@@ -413,14 +415,19 @@ object Doctor {
                 FixKind.FILES -> {
                     val templates = fix.items.filter { it.second.startsWith("template:") }
                     val fromGit = fix.items.filter { !it.second.startsWith("template:") }
+                    val created = mutableListOf<OpAction>()
                     templates.forEach { (path, src) ->
                         Templates.content(src.removePrefix("template:"), project.name)?.let { content ->
                             val f = File(dir, path)
                             f.parentFile?.mkdirs()
-                            if (!f.exists()) f.writeText(content)
+                            if (!f.exists()) { f.writeText(content); created += OpAction("CREATED", f.absolutePath) }
                         }
                     }
+                    val missingBefore = fromGit.filter { !File(dir, it.first).exists() }.map { it.first }
                     fromGit.groupBy({ it.second }, { it.first }).forEach { (ref, paths) -> gm.restorePaths(dir, ref, paths) }
+                    missingBefore.filter { File(dir, it).exists() }.forEach { created += OpAction("CREATED", File(dir, it).absolutePath) }
+                    // تسجيل الإصلاح ليمكن التراجع عنه
+                    OpJournal.record(ctx, project.path, ctx.getString(R.string.op_doctor, fix.label), created)
                     ctx.getString(R.string.doc_done_files, fix.items.size)
                 }
             }

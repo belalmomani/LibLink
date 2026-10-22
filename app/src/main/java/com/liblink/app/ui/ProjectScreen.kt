@@ -227,9 +227,11 @@ fun ProjectScreen(
     }
 
     // الخطوة 1: استيراد ملفات أو مجلد من الهاتف مع خيار الاستبدال (القديم يذهب لسلة المحذوفات)
-    val importer = rememberImportUi(dir) { m -> log = m; repo.markUpdated(project.id) }
+    val importer = rememberImportUi(dir, project.path) { m -> log = m; repo.markUpdated(project.id) }
+    // التراجع عن آخر عملية على الملفات
+    val undo = rememberUndo(project.path) { m -> log = m; repo.markUpdated(project.id) }
     // تحديث المشروع من ملف ZIP
-    val zipper = rememberZipUi(dir) { m -> log = m; repo.markUpdated(project.id) }
+    val zipper = rememberZipUi(dir, project.path) { m -> log = m; repo.markUpdated(project.id) }
 
     // عنصر قائمة مع علامة "؟" تعرض ملاحظة صغيرة عن عمله
     @Composable
@@ -317,6 +319,13 @@ fun ProjectScreen(
                 StepCard(stringResource(R.string.repo_broken_title),
                     stringResource(R.string.repo_broken_desc, project.path)) {
                     Button(onClick = { doRepair() }, enabled = !busy) { Text(stringResource(R.string.repair_btn)) }
+                }
+            }
+            // آخر عملية على الملفات مع زر التراجع عنها
+            undo.last?.let { op ->
+                StepCard(stringResource(R.string.undo_title), op.label + " · " +
+                    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT).format(java.util.Date(op.at))) {
+                    OutlinedButton(onClick = { undo.ask() }, enabled = !busy) { Text(stringResource(R.string.undo_btn)) }
                 }
             }
             Text(stringResource(R.string.path_label, project.path), style = MaterialTheme.typography.bodySmall)

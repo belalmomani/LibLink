@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import com.liblink.app.R
 import com.liblink.app.data.Project
 import com.liblink.app.git.GitManager
+import com.liblink.app.storage.OpAction
+import com.liblink.app.storage.OpJournal
 import com.liblink.app.storage.ProjectStorage
 import com.liblink.app.storage.Trash
 import java.io.File
@@ -64,6 +66,7 @@ fun FilesScreen(
         if (f.exists()) { msg = ctx.getString(R.string.exists); return }
         try {
             if (dir) f.mkdirs() else { f.parentFile?.mkdirs(); f.createNewFile() }
+            OpJournal.record(ctx, project.path, ctx.getString(R.string.op_create, f.name), listOf(OpAction("CREATED", f.absolutePath)))
             msg = ctx.getString(R.string.created); tick++
         } catch (e: Exception) { err(e) }
     }
@@ -72,7 +75,10 @@ fun FilesScreen(
         if (name.isBlank() || name.contains('/') || name.contains('\\')) { msg = ctx.getString(R.string.invalid_name); return }
         val t = File(f.parentFile, name.trim())
         if (t.exists()) { msg = ctx.getString(R.string.exists); return }
-        if (f.renameTo(t)) { msg = ctx.getString(R.string.renamed); tick++ }
+        if (f.renameTo(t)) {
+            OpJournal.record(ctx, project.path, ctx.getString(R.string.op_rename, f.name), listOf(OpAction("RENAMED", f.absolutePath, t.absolutePath)))
+            msg = ctx.getString(R.string.renamed); tick++
+        }
         else msg = ctx.getString(R.string.invalid_name)
     }
 
@@ -81,6 +87,7 @@ fun FilesScreen(
         try {
             val t = ProjectStorage.uniqueFile(f.parentFile ?: cur, f.name)
             f.copyRecursively(t)
+            OpJournal.record(ctx, project.path, ctx.getString(R.string.op_copy, f.name), listOf(OpAction("CREATED", t.absolutePath)))
             msg = ctx.getString(R.string.copied) + ": " + t.name; tick++
         } catch (e: Exception) { err(e) }
     }
@@ -95,8 +102,9 @@ fun FilesScreen(
     }
 
     // استيراد ملفات أو مجلد إلى المجلد الحالي مع خيار الاستبدال
-    val importer = rememberImportUi(cur) { m -> msg = m; tick++ }
-    val zipper = rememberZipUi(cur) { m -> msg = m; tick++ }
+    val importer = rememberImportUi(cur, project.path) { m -> msg = m; tick++ }
+    val zipper = rememberZipUi(cur, project.path) { m -> msg = m; tick++ }
+    val undo = rememberUndo(project.path) { m -> msg = m; tick++ }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -111,6 +119,7 @@ fun FilesScreen(
                         DropdownMenuItem({ Text(stringResource(R.string.import_folder)) }, { addMenu = false; importer.pickFolder() })
                         DropdownMenuItem({ Text(stringResource(R.string.import_zip)) }, { addMenu = false; zipper.pickZip() })
                         DropdownMenuItem({ Text(stringResource(R.string.trash_title)) }, { addMenu = false; onTrash() })
+                        if (undo.last != null) DropdownMenuItem({ Text(stringResource(R.string.undo_btn)) }, { addMenu = false; undo.ask() })
                     }
                 }
             })
@@ -169,7 +178,11 @@ fun FilesScreen(
         is FDlg.Delete -> ConfirmDialog(stringResource(R.string.delete),
             stringResource(R.string.delete_confirm, d.file.name) + "\n" + stringResource(R.string.trash_moved),
             onConfirm = {
-                try { Trash.put(ctx, d.file, "deleted"); msg = ctx.getString(R.string.trash_moved); tick++ }
+                try {
+                    val id = Trash.put(ctx, d.file, "deleted")
+                    OpJournal.record(ctx, project.path, ctx.getString(R.string.op_delete, d.file.name), listOf(OpAction("DELETED", d.file.absolutePath, id)))
+                    msg = ctx.getString(R.string.trash_moved); tick++
+                }
                 catch (e: Exception) { err(e) }
                 dlg = null
             }, onDismiss = { dlg = null })

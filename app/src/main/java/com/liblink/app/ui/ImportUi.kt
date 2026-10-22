@@ -13,6 +13,7 @@ import com.liblink.app.R
 import com.liblink.app.storage.Import
 import com.liblink.app.storage.ImportItem
 import com.liblink.app.storage.ImportMode
+import com.liblink.app.storage.OpJournal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -22,7 +23,7 @@ class ImportUi(val pickFiles: () -> Unit, val pickFolder: () -> Unit)
 
 // استيراد ملفات أو مجلد إلى target مع سؤال المستخدم عن الاستبدال عند وجود ملفات بنفس الاسم
 @Composable
-fun rememberImportUi(target: File, onDone: (String) -> Unit): ImportUi {
+fun rememberImportUi(target: File, projectPath: String, onDone: (String) -> Unit): ImportUi {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val targetNow = rememberUpdatedState(target)
@@ -34,6 +35,8 @@ fun rememberImportUi(target: File, onDone: (String) -> Unit): ImportUi {
         scope.launch {
             val text = try {
                 val r = withContext(Dispatchers.IO) { Import.run(ctx, targetNow.value, items, mode) }
+                // تسجيل العملية للتراجع عنها لاحقًا
+                OpJournal.record(ctx, projectPath, ctx.getString(R.string.op_import, r.copied), r.actions)
                 ctx.getString(R.string.import_done, r.copied, r.replaced)
             } catch (e: Exception) {
                 ctx.getString(R.string.error_prefix, e.message ?: e.toString())

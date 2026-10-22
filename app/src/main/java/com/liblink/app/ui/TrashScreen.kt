@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.liblink.app.R
 import com.liblink.app.data.ProjectRepository
+import com.liblink.app.storage.OpAction
+import com.liblink.app.storage.OpJournal
 import com.liblink.app.storage.ProjectStorage
 import com.liblink.app.storage.Trash
 import kotlinx.coroutines.Dispatchers
@@ -104,6 +106,10 @@ fun TrashScreen(onBack: () -> Unit) {
                                     scope.launch {
                                         msg = try {
                                             val f = withContext(Dispatchers.IO) { Trash.restore(e) }
+                                            // تسجيل الاستعادة داخل المشروع الذي تتبعه لإمكان التراجع
+                                            ProjectRepository(ctx).projects()
+                                                .firstOrNull { f.absolutePath.startsWith(it.path.trimEnd('/') + "/") }
+                                                ?.let { pr -> OpJournal.record(ctx, pr.path, ctx.getString(R.string.op_restore, f.name), listOf(OpAction("CREATED", f.absolutePath))) }
                                             ctx.getString(R.string.trash_restored, f.absolutePath)
                                         } catch (ex: Exception) {
                                             ctx.getString(R.string.error_prefix, ex.message ?: ex.toString())

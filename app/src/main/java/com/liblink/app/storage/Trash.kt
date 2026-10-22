@@ -18,8 +18,8 @@ object Trash {
     private fun root(ctx: Context) = File(ctx.filesDir, "trash").apply { mkdirs() }
 
     // نقل ملف أو مجلد إلى السلة مع حفظ مساره الأصلي ووقت الحذف
-    fun put(ctx: Context, file: File, reason: String) {
-        if (!file.exists()) return
+    fun put(ctx: Context, file: File, reason: String): String {
+        if (!file.exists()) return ""
         val d = File(root(ctx), "${System.currentTimeMillis()}_${UUID.randomUUID().toString().take(6)}")
         val target = File(File(d, "item"), file.name)
         target.parentFile?.mkdirs()
@@ -29,6 +29,7 @@ object Trash {
                 .put("reason", reason).toString()
         )
         file.deleteRecursively()
+        return d.name // معرّف العنصر في السلة (يستخدمه التراجع)
     }
 
     fun list(ctx: Context): List<Entry> =
@@ -49,6 +50,15 @@ object Trash {
         if (e.item.isDirectory) e.item.copyRecursively(dest) else e.item.copyTo(dest)
         e.dir.deleteRecursively()
         return dest
+    }
+
+    fun find(ctx: Context, id: String): Entry? = list(ctx).firstOrNull { it.dir.name == id }
+
+    // استعادة إلى مسار محدد (فوق أي شيء موجود) ثم حذف العنصر من السلة
+    fun restoreTo(e: Entry, dest: File) {
+        dest.parentFile?.mkdirs()
+        if (e.item.isDirectory) e.item.copyRecursively(dest, overwrite = true) else e.item.copyTo(dest, overwrite = true)
+        e.dir.deleteRecursively()
     }
 
     fun delete(e: Entry) = e.dir.deleteRecursively()
