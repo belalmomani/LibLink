@@ -91,6 +91,8 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit, o
     var apk by remember { mutableStateOf<File?>(null) }
     var tick by remember { mutableIntStateOf(0) }
     var diagnosis by remember { mutableStateOf<Diagnosis?>(null) }
+    // حارس مفتاح التوقيع قبل التثبيت
+    val keyGuard = rememberKeyGuard(project, repo) { msg = it }
     // إذن الإشعارات (أندرويد 13+) لإشعار انتهاء البناء
     val notifPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     var boost by remember { mutableIntStateOf(0) } // مرات إضافية للفحص بعد التشغيل حتى يظهر التنفيذ الجديد
@@ -202,6 +204,7 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit, o
                 val base = "${parsed.second}-${run.number}"
                 val f = api.downloadApk(art, File(out, "$base.zip"), File(out, "$base.apk"))
                 apk = f
+                keyGuard.check(f, run.id, false)
                 ctx.getString(R.string.apk_saved, f.absolutePath)
             } catch (e: Exception) { describe(e) }
             busy = false
@@ -276,7 +279,7 @@ fun BuildScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit, o
 
             apk?.let { f ->
                 StepCard(stringResource(R.string.download_apk), f.absolutePath) {
-                    Button({ installApk(ctx, f)?.let { msg = it } }) { Text(stringResource(R.string.install_apk)) }
+                    Button({ keyGuard.check(f, 0L, true) }) { Text(stringResource(R.string.install_apk)) }
                 }
             }
 

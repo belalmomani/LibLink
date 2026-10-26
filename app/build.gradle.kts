@@ -77,6 +77,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0") // تبديل اللغة عربي/إنجليزي
     implementation("androidx.documentfile:documentfile:1.0.1") // اختيار مكان الحفظ
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    implementation("com.android.tools.build:apksig:8.5.0") // إعادة توقيع APK بمفتاحك القديم
     implementation("androidx.work:work-runtime-ktx:2.9.1") // مراقبة البناء وإشعار انتهائه
 
     // عمليات Git (نفس مكتبة MGit)

@@ -12,6 +12,8 @@ import com.liblink.app.R
 import com.liblink.app.data.DraftStore
 import com.liblink.app.data.LibraryRepository
 import com.liblink.app.data.ProjectRepository
+import com.liblink.app.data.libKey
+import com.liblink.app.sync.SyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -29,6 +31,8 @@ sealed interface Screen {
     data class Build(val id: String) : Screen
     data class Doctor(val id: String) : Screen
     data class Releases(val id: String) : Screen
+    data class Deps(val id: String) : Screen
+    object CloudProjects : Screen
 }
 
 @Composable
@@ -72,6 +76,12 @@ fun LibLinkRoot(
         }
     }
 
+    // مشاريع الأجهزة الأخرى التي ليست عند هذا الجهاز
+    val cloudCount = remember(version, SyncManager.changeCount) {
+        val local = repo.projects().map { libKey(it.remoteUrl) }.toSet()
+        repo.cloudProjects().count { libKey(it.url) !in local }
+    }
+
     // الرجوع: المحرر ← الملفات ← المشروع ← الرئيسية
     BackHandler(enabled = screen != Screen.Home) {
         screen = when (val s = screen) {
@@ -81,6 +91,7 @@ fun LibLinkRoot(
             is Screen.Build -> Screen.Project(s.id)
             is Screen.Doctor -> Screen.Project(s.id)
             is Screen.Releases -> Screen.Build(s.id)
+            is Screen.Deps -> Screen.Project(s.id)
             is Screen.Trash -> s.from
             else -> Screen.Home
         }
@@ -91,6 +102,8 @@ fun LibLinkRoot(
             projects = remember(version) { repo.projects() },
             onAdd = { screen = Screen.Add() },
             onLibrary = { screen = Screen.Library() },
+            cloudCount = cloudCount,
+            onCloud = { screen = Screen.CloudProjects },
             onOpen = { screen = Screen.Project(it) },
             onSettings = { screen = Screen.Settings }
         )
@@ -113,6 +126,7 @@ fun LibLinkRoot(
                 onBranches = { screen = Screen.Branches(s.id) },
                 onBuild = { screen = Screen.Build(s.id) },
                 onDoctor = { screen = Screen.Doctor(s.id) },
+                onDeps = { screen = Screen.Deps(s.id) },
                 onRemoved = { version++; screen = Screen.Home })
         }
         is Screen.Files -> {
@@ -131,6 +145,14 @@ fun LibLinkRoot(
             if (p == null) screen = Screen.Home
             else BuildScreen(p, repo, onBack = { screen = Screen.Project(s.id) },
                 onReleases = { screen = Screen.Releases(s.id) })
+        }
+        Screen.CloudProjects -> CloudProjectsScreen(repo,
+            onBack = { screen = Screen.Home },
+            onClone = { url, name -> screen = Screen.Add(url, name) })
+        is Screen.Deps -> {
+            val p = repo.find(s.id)
+            if (p == null) screen = Screen.Home
+            else DependencyScreen(p, onBack = { screen = Screen.Project(s.id) })
         }
         is Screen.Doctor -> {
             val p = repo.find(s.id)

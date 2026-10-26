@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.work.*
 import com.liblink.app.data.ProjectRepository
 import com.liblink.app.doctor.BuildDiagnosis
+import com.liblink.app.doctor.ReleaseNotes
+import com.liblink.app.storage.ReleaseStore
 import com.liblink.app.network.GitHubApi
 import kotlinx.coroutines.delay
 import java.time.Instant
@@ -36,6 +38,12 @@ class BuildWatchWorker(private val ctx: Context, params: WorkerParameters) : Cor
                     val d = BuildDiagnosis.analyze(ctx, api.failureReport(owner, repo, run.id))
                     d.stage + ": " + d.cause
                 }.getOrNull()
+                // عند النجاح: نسجّل الإصدار ونكتب ملاحظاته التلقائية قبل الإشعار
+                if (ok) runCatching {
+                    val store = ReleaseStore(ctx)
+                    store.upsertRun(pid, run)
+                    ReleaseNotes.ensure(ctx, api, owner, repo, store, pid)
+                }
                 Notifier.buildDone(ctx, pid, name, run.number, ok, detail)
                 return Result.success()
             }

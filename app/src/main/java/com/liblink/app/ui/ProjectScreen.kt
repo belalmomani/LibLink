@@ -50,6 +50,7 @@ fun ProjectScreen(
     onBranches: () -> Unit,
     onBuild: () -> Unit,
     onDoctor: () -> Unit,
+    onDeps: () -> Unit,
     onRemoved: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -279,6 +280,7 @@ fun ProjectScreen(
                         MenuItem(R.string.m_cherry, R.string.h_cherry) { dlg = Dlg.CherryPick }
                         MenuItem(R.string.m_branches, R.string.h_branches) { onBranches() }
                         MenuItem(R.string.m_doctor, R.string.h_doctor) { onDoctor() }
+                        MenuItem(R.string.m_deps, R.string.h_deps) { onDeps() }
                         MenuItem(R.string.m_build_apk, R.string.h_build_apk) { onBuild() }
                         MenuItem(R.string.m_save_lib, R.string.h_save_lib) { saveToLibrary() }
                         MenuItem(R.string.m_diff, R.string.h_diff) {
@@ -343,6 +345,9 @@ fun ProjectScreen(
             // مركز التشخيص: فحص المشروع وخطة إنقاذ مع معاينة الإصلاح
             OutlinedButton(onClick = onDoctor, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.doctor_btn))
+            }
+            OutlinedButton(onClick = onDeps, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.deps_btn))
             }
             Text(stringResource(R.string.steps_title), style = MaterialTheme.typography.titleLarge)
 

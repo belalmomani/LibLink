@@ -23,6 +23,11 @@ class GitHubApi(private val token: String) {
 
     data class Artifact(val id: Long, val name: String, val size: Long, val expired: Boolean, val downloadUrl: String)
 
+    data class FileChange(val name: String, val status: String, val add: Int, val del: Int)
+
+    // مقارنة بين commitين: رسائل الـ commits والملفات التي تغيّرت
+    data class Compare(val commits: List<String>, val totalCommits: Int, val files: List<FileChange>)
+
     // نتيجة قراءة سجل المهمة الفاشلة: المهمة والخطوة وأهم سطور الخطأ
     data class FailureReport(val job: String?, val step: String?, val lines: List<String>)
 
@@ -120,6 +125,22 @@ class GitHubApi(private val token: String) {
         zipFile.delete()
         if (!found) throw GitHubException(0, "NO_APK")
         apkFile
+    }
+
+    suspend fun compare(owner: String, repo: String, base: String, head: String): Compare = withContext(Dispatchers.IO) {
+        val j = getJson("https://api.github.com/repos/$owner/$repo/compare/$base...$head")
+        val cs = j.optJSONArray("commits")
+        val fs = j.optJSONArray("files")
+        Compare(
+            (0 until (cs?.length() ?: 0)).map {
+                cs!!.getJSONObject(it).optJSONObject("commit")?.optString("message").orEmpty().lineSequence().firstOrNull().orEmpty()
+            },
+            j.optInt("total_commits", cs?.length() ?: 0),
+            (0 until (fs?.length() ?: 0)).map {
+                val o = fs!!.getJSONObject(it)
+                FileChange(o.optString("filename"), o.optString("status"), o.optInt("additions"), o.optInt("deletions"))
+            }
+        )
     }
 
     suspend fun jobs(owner: String, repo: String, runId: Long): List<Job> = withContext(Dispatchers.IO) {

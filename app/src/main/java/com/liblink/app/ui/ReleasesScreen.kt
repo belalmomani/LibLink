@@ -20,13 +20,18 @@ import com.liblink.app.data.Project
 import com.liblink.app.data.ProjectRepository
 import com.liblink.app.doctor.BuildDiagnosis
 import com.liblink.app.doctor.Diagnosis
+import com.liblink.app.doctor.ReleaseNotes
 import com.liblink.app.network.GitHubApi
 import com.liblink.app.network.GitHubException
 import com.liblink.app.storage.ProjectStorage
+import com.liblink.app.storage.ReleaseRecord
 import com.liblink.app.storage.ReleaseStore
+import com.liblink.app.storage.Signing
 import com.liblink.app.storage.formatDelta
 import com.liblink.app.storage.formatSize
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 // سجل الإصدارات: رقم النسخة والـ Commit وحجم APK والفرق عن السابقة ورابط التنزيل
@@ -43,6 +48,10 @@ fun ReleasesScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit
     var msg by remember { mutableStateOf("") }
     var diagnosis by remember { mutableStateOf<Diagnosis?>(null) }
     val records = remember(tick) { store.list(project.id) }
+    val keyRef = remember(tick) { repo.keyRef(project.id) }
+    var notesFor by remember { mutableStateOf<ReleaseRecord?>(null) }
+    // حارس مفتاح التوقيع: ينبّه إن اختلف مفتاح أي نسخة عن مفتاح نسخك السابقة
+    val keyGuard = rememberKeyGuard(project, repo) { msg = it; tick++ }
 
     fun describe(e: Exception): String = when {
         e is GitHubException && e.code == 404 -> ctx.getString(R.string.api_404)
@@ -75,6 +84,8 @@ fun ReleasesScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit
                         if (art != null) store.update(project.id, r.id) { it.copy(sizeBytes = art.size, artifactId = art.id) }
                     }
                 }
+                // ملاحظات الإصدارات: ما تغيّر منذ النسخة السابقة
+                runCatching { ReleaseNotes.ensure(ctx, api, parsed.first, parsed.second, store, project.id) }
                 ""
             } catch (e: Exception) { describe(e) }
             tick++
@@ -96,7 +107,42 @@ fun ReleasesScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit
                 val base = "${parsed.second}-$number"
                 val f = api.downloadApk(art, File(out, "$base.zip"), File(out, "$base.apk"))
                 store.update(project.id, runId) { it.copy(apkPath = f.absolutePath) }
+                keyGuard.check(f, runId, false)
                 ctx.getString(R.string.apk_saved, f.absolutePath)
+            } catch (e: Exception) { describe(e) }
+            tick++
+            busy = false
+        }
+    }
+
+    // مقارنة مفتاح توقيع كل نسخة (يُنزّل حتى 8 نسخ لم تُفحص بعد)
+    fun checkKeys() {
+        if (!guard()) return
+        scope.launch {
+            busy = true
+            msg = ctx.getString(R.string.keys_checking)
+            msg = try {
+                val api = GitHubApi(token)
+                val out = File(ProjectStorage.organizedRoot(ctx), "builds").apply { mkdirs() }
+                var n = 0
+                for (rec in store.list(project.id).filter { it.success && it.keyFp.isBlank() }.take(8)) {
+                    val existing = rec.apkPath.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.exists() }
+                    val file: File
+                    if (existing != null) file = existing
+                    else {
+                        val art = api.artifacts(parsed!!.first, parsed.second, rec.runId).firstOrNull { !it.expired } ?: continue
+                        val base = "${parsed.second}-${rec.number}"
+                        file = api.downloadApk(art, File(out, "$base.zip"), File(out, "$base.apk"))
+                        store.update(project.id, rec.runId) { it.copy(apkPath = file.absolutePath) }
+                    }
+                    val k = withContext(Dispatchers.IO) { Signing.ofApk(ctx, file) } ?: continue
+                    store.update(project.id, rec.runId) { it.copy(keyFp = k.fp) }
+                    withContext(Dispatchers.IO) { Signing.reference(ctx, repo, store, project.id, k) }
+                    n++
+                }
+                val ref = repo.keyRef(project.id)
+                val diff = store.list(project.id).count { it.keyFp.isNotBlank() && it.keyFp != ref }
+                if (diff > 0) ctx.getString(R.string.keys_diff, diff) else ctx.getString(R.string.keys_same, n)
             } catch (e: Exception) { describe(e) }
             tick++
             busy = false
@@ -123,6 +169,7 @@ fun ReleasesScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppBar(stringResource(R.string.releases_title), onBack, actions = {
+                TextButton({ checkKeys() }, enabled = !busy) { Text(stringResource(R.string.keys_check)) }
                 TextButton({ refresh() }, enabled = !busy) { Text(stringResource(R.string.refresh)) }
             })
         }
@@ -158,6 +205,13 @@ fun ReleasesScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit
                                 Text(stringResource(R.string.rel_commit, rec.sha) + if (rec.message.isNotBlank()) " · " + rec.message else "",
                                     style = MaterialTheme.typography.bodySmall)
 
+                                if (rec.keyFp.isNotBlank()) {
+                                    val same = keyRef.isBlank() || rec.keyFp == keyRef
+                                    Text(stringResource(R.string.key_line, Signing.short(rec.keyFp)) + "  ·  " +
+                                        stringResource(if (same) R.string.key_badge_same else R.string.key_badge_diff),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (same) Color(0xFF22C55E) else Color(0xFFEF4444))
+                                }
                                 if (rec.success) {
                                     if (rec.sizeBytes > 0) {
                                         Text(stringResource(R.string.rel_size, formatSize(rec.sizeBytes)),
@@ -181,8 +235,11 @@ fun ReleasesScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit
                                             clipboard.setText(AnnotatedString(link)); msg = ctx.getString(R.string.link_copied)
                                         }) { Text(stringResource(R.string.copy_link)) }
                                     }
+                                    if (rec.notes.isNotBlank()) {
+                                        OutlinedButton({ notesFor = rec }) { Text(stringResource(R.string.notes_btn)) }
+                                    }
                                     if (rec.apkPath.isNotBlank() && File(rec.apkPath).exists()) {
-                                        OutlinedButton({ installApk(ctx, File(rec.apkPath))?.let { msg = it } }) {
+                                        OutlinedButton({ keyGuard.check(File(rec.apkPath), rec.runId, true) }) {
                                             Text(stringResource(R.string.install_apk))
                                         }
                                     }
@@ -198,6 +255,8 @@ fun ReleasesScreen(project: Project, repo: ProjectRepository, onBack: () -> Unit
             }
         }
     }
+
+    notesFor?.let { r -> InfoDialog(stringResource(R.string.notes_btn) + " v" + r.versionName, r.notes) { notesFor = null } }
 
     diagnosis?.let { d ->
         DiagnosisDialog(d, onCopy = { clipboard.setText(AnnotatedString(it)); msg = ctx.getString(R.string.link_copied) },

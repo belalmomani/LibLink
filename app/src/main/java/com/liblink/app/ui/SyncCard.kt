@@ -128,6 +128,7 @@ fun SyncCard(repo: ProjectRepository) {
                 })
             }
             Text(stringResource(R.string.sync_token_note), style = MaterialTheme.typography.bodySmall)
+            Text(stringResource(R.string.sync_projects_note), style = MaterialTheme.typography.bodySmall)
             if (SyncManager.warningRes != 0) Text(stringResource(SyncManager.warningRes),
                 color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
 

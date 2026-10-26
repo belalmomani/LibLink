@@ -18,11 +18,15 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.liblink.app.R
+import com.liblink.app.data.CloudProject
 import com.liblink.app.data.LibSnapshot
 import com.liblink.app.data.LibraryRepository
 import com.liblink.app.data.ProjectRepository
+import com.liblink.app.data.cloudProjectsFromJson
+import com.liblink.app.data.cloudProjectsToJson
 import com.liblink.app.data.libKey
 import com.liblink.app.data.mergeLibrary
+import com.liblink.app.data.mergeProjects
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -54,7 +58,7 @@ private data class Cfg(
 }
 
 private class Data(val lib: LibSnapshot, val cfg: Cfg)
-private class Merged(val data: Data, val remoteSettingsWon: Boolean)
+private class Merged(val data: Data, val remoteSettingsWon: Boolean, val projects: List<CloudProject>, val projTombs: Map<String, Long>)
 
 // مزامنة المكتبة والإعدادات بين أجهزة نفس الحساب عبر Firebase Auth + Firestore
 object SyncManager {
@@ -139,6 +143,22 @@ object SyncManager {
         return lib to Cfg.fromJson(snap.getString("settings"), snap.getLong("settingsAt") ?: 0L)
     }
 
+    // قائمة مشاريع الأجهزة الأخرى (اسم وعنوان فقط) وشواهد إخفائها
+    private fun parseProjects(snap: DocumentSnapshot): Pair<List<CloudProject>, Map<String, Long>> {
+        val list = runCatching { cloudProjectsFromJson(JSONArray(snap.getString("projects") ?: "[]")) }.getOrDefault(emptyList())
+        val tombs = runCatching {
+            val a = JSONArray(snap.getString("projTombs") ?: "[]")
+            (0 until a.length()).associate { val o = a.getJSONObject(it); o.getString("k") to o.getLong("at") }
+        }.getOrDefault(emptyMap())
+        return list to tombs
+    }
+
+    private fun tombsJson(m: Map<String, Long>): String {
+        val a = JSONArray()
+        m.toSortedMap().forEach { (k, t) -> a.put(JSONObject().put("k", k).put("at", t)) }
+        return a.toString()
+    }
+
     // معاينة نتيجة الدمج دون كتابة أي شيء: ما سيُضاف هنا وما سيُزال
     class Preview(
         val localCount: Int, val remoteCount: Int, val mergedCount: Int,
@@ -173,7 +193,18 @@ object SyncManager {
         val merged: Merged = db.runTransaction { tx ->
             val snap = tx.get(ref)
             val (remoteLib, remoteCfg) = parseRemote(snap)
+            val (remoteProj, remoteProjTombs) = parseProjects(snap)
             val local = localData(app)
+            val prepo = ProjectRepository(app)
+
+            // مشاريع هذا الجهاز التي لها عنوان GitHub (اسم وعنوان فقط) تُدمج مع قائمة الأجهزة الأخرى
+            val known = (prepo.cloudProjects() + remoteProj).associateBy { libKey(it.url) }
+            val localProj = prepo.projects().filter { it.remoteUrl.isNotBlank() }.map {
+                CloudProject(it.name, it.remoteUrl.trim(), known[libKey(it.remoteUrl)]?.at ?: System.currentTimeMillis())
+            }
+            val (projList, projTombs) = mergeProjects(localProj, remoteProj, prepo.cloudTombs(), remoteProjTombs)
+            val projJson = cloudProjectsToJson(projList).toString()
+            val projTombsJson = tombsJson(projTombs)
 
             val lib = mergeLibrary(local.lib, remoteLib)
             val remoteWon = remoteCfg.at >= local.cfg.at
@@ -184,14 +215,16 @@ object SyncManager {
             val catJson = JSONArray(lib.categories).toString()
             val cfgJson = cfg.toJson()
             val unchanged = snap.exists() && snap.getString("library") == libJson && snap.getString("tombs") == tombsJson &&
-                snap.getString("categories") == catJson && snap.getString("settings") == cfgJson && snap.getLong("settingsAt") == cfg.at
+                snap.getString("categories") == catJson && snap.getString("settings") == cfgJson && snap.getLong("settingsAt") == cfg.at &&
+                snap.getString("projects") == projJson && snap.getString("projTombs") == projTombsJson
             if (!unchanged) {
                 tx.set(ref, mapOf(
                     "schema" to 1L, "library" to libJson, "tombs" to tombsJson, "categories" to catJson,
-                    "settings" to cfgJson, "settingsAt" to cfg.at, "updatedAt" to System.currentTimeMillis()
+                    "settings" to cfgJson, "settingsAt" to cfg.at, "projects" to projJson, "projTombs" to projTombsJson,
+                    "updatedAt" to System.currentTimeMillis()
                 ))
             }
-            Merged(Data(lib, cfg), remoteWon && remoteCfg.at > local.cfg.at)
+            Merged(Data(lib, cfg), remoteWon && remoteCfg.at > local.cfg.at, projList, projTombs)
         }.await()
 
         // ---- تطبيق النتيجة محليًا
@@ -201,6 +234,7 @@ object SyncManager {
             libRepo.savePreSync()
         }
         libRepo.replaceAll(merged.data.lib)
+        ProjectRepository(app).apply { setCloudProjects(merged.projects); setCloudTombs(merged.projTombs) }
         val repo = ProjectRepository(app)
         var warn = 0
         var langToApply = ""

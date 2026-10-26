@@ -58,6 +58,8 @@ fun HomeScreen(
     projects: List<Project>,
     onAdd: () -> Unit,
     onLibrary: () -> Unit,
+    cloudCount: Int,
+    onCloud: () -> Unit,
     onOpen: (String) -> Unit,
     onSettings: () -> Unit
 ) {
@@ -104,8 +106,16 @@ fun HomeScreen(
         bottomBar = { AdBanner(Modifier.fillMaxWidth().navigationBarsPadding()) }
     ) { pad ->
         Column(Modifier.padding(pad).padding(horizontal = 16.dp)) {
+            // مشاريع أجهزتك الأخرى (اسم وعنوان فقط)
+            if (cloudCount > 0) {
+                Card(Modifier.fillMaxWidth().padding(top = 8.dp).clickable { onCloud() },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))) {
+                    Text(stringResource(R.string.cloud_card, cloudCount), Modifier.padding(14.dp),
+                        color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleSmall)
+                }
+            }
             if (projects.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                     Text(stringResource(R.string.no_projects))
                 }
                 return@Column

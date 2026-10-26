@@ -62,6 +62,50 @@ class ProjectRepository(context: Context) {
     fun versionLabel(id: String): String = commitCount(id).let { if (it == 0) "v1" else "v1.$it" }
     fun bumpVersion(id: String) = prefs.edit().putInt("ver_$id", commitCount(id) + 1).apply()
 
+    // ---------------- مفاتيح التوقيع ----------------
+    fun keyRef(projectId: String) = prefs.getString("keyref_$projectId", "") ?: ""
+    fun setKeyRef(projectId: String, fp: String) = prefs.edit().putString("keyref_$projectId", fp).apply()
+
+    // المفتاح القديم المحفوظ على هذا الجهاز لإعادة التوقيع بنقرة (يُخزَّن داخل التطبيق فقط)
+    class SavedKey(val alias: String, val storePass: String, val keyPass: String)
+
+    fun savedKey(projectId: String): SavedKey? {
+        val raw = prefs.getString("okey_$projectId", null) ?: return null
+        val o = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+        return SavedKey(o.optString("alias"), o.optString("sp"), o.optString("kp"))
+    }
+
+    fun saveKey(projectId: String, alias: String, storePass: String, keyPass: String) {
+        prefs.edit().putString("okey_$projectId", JSONObject().put("alias", alias).put("sp", storePass).put("kp", keyPass).toString()).apply()
+    }
+
+    fun keyFile(projectId: String) = java.io.File(java.io.File(appCtx.filesDir, "keys").apply { mkdirs() }, "$projectId.ks")
+
+    // ---------------- قائمة مشاريع الأجهزة الأخرى (اسم وعنوان فقط) ----------------
+    fun cloudProjects(): List<CloudProject> =
+        runCatching { cloudProjectsFromJson(org.json.JSONArray(prefs.getString("cloud_projects", "[]"))) }.getOrDefault(emptyList())
+
+    fun setCloudProjects(l: List<CloudProject>) = prefs.edit().putString("cloud_projects", cloudProjectsToJson(l).toString()).apply()
+
+    fun cloudTombs(): Map<String, Long> = runCatching {
+        val a = org.json.JSONArray(prefs.getString("cloud_tombs", "[]"))
+        (0 until a.length()).associate { val o = a.getJSONObject(it); o.getString("k") to o.getLong("at") }
+    }.getOrDefault(emptyMap())
+
+    fun setCloudTombs(m: Map<String, Long>) {
+        val a = org.json.JSONArray()
+        m.forEach { (k, t) -> a.put(JSONObject().put("k", k).put("at", t)) }
+        prefs.edit().putString("cloud_tombs", a.toString()).apply()
+    }
+
+    // إخفاء مشروع من قائمة الأجهزة الأخرى (يُزامَن إلى بقية الأجهزة)
+    fun hideCloudProject(url: String) {
+        val k = libKey(url)
+        setCloudTombs(cloudTombs() + (k to System.currentTimeMillis()))
+        setCloudProjects(cloudProjects().filter { libKey(it.url) != k })
+        SyncManager.onLocalChange(appCtx)
+    }
+
     // ---------------- إعدادات المزامنة السحابية ----------------
     fun settingsUpdatedAt() = prefs.getLong("settings_at", 0L)
 

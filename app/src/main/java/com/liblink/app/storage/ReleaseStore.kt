@@ -7,7 +7,7 @@ import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.abs
 
-// سجل إصدار: رقم النسخة والـ Commit الذي أنتجها وحجم الـ APK وحالة البناء
+// سجل إصدار: رقم النسخة والـ Commit الذي أنتجها وحجم الـ APK ومفتاح توقيعها وملاحظات التغييرات
 data class ReleaseRecord(
     val runId: Long,
     val number: Int,          // رقم البناء = versionCode
@@ -20,7 +20,10 @@ data class ReleaseRecord(
     val success: Boolean,
     val runUrl: String,
     val apkPath: String,      // مسار الـ APK بعد تنزيله
-    val failReason: String    // سبب الفشل بعد التشخيص
+    val failReason: String,   // سبب الفشل بعد التشخيص
+    val fullSha: String = "", // الـ commit كاملًا (لمقارنة الإصدارات)
+    val keyFp: String = "",   // بصمة مفتاح التوقيع SHA-256
+    val notes: String = ""    // ملاحظات الإصدار التلقائية
 )
 
 fun formatSize(bytes: Long): String =
@@ -46,7 +49,8 @@ class ReleaseStore(context: Context) {
             ReleaseRecord(
                 o.optLong("runId"), o.optInt("number"), o.optString("versionName"), o.optString("sha"),
                 o.optString("message"), o.optLong("sizeBytes"), o.optLong("artifactId"), o.optString("createdAt"),
-                o.optBoolean("success"), o.optString("runUrl"), o.optString("apkPath"), o.optString("failReason")
+                o.optBoolean("success"), o.optString("runUrl"), o.optString("apkPath"), o.optString("failReason"),
+                o.optString("fullSha"), o.optString("keyFp"), o.optString("notes")
             )
         }.sortedByDescending { it.number }
     }
@@ -57,19 +61,21 @@ class ReleaseStore(context: Context) {
             arr.put(JSONObject().put("runId", it.runId).put("number", it.number).put("versionName", it.versionName)
                 .put("sha", it.sha).put("message", it.message).put("sizeBytes", it.sizeBytes)
                 .put("artifactId", it.artifactId).put("createdAt", it.createdAt).put("success", it.success)
-                .put("runUrl", it.runUrl).put("apkPath", it.apkPath).put("failReason", it.failReason))
+                .put("runUrl", it.runUrl).put("apkPath", it.apkPath).put("failReason", it.failReason)
+                .put("fullSha", it.fullSha).put("keyFp", it.keyFp).put("notes", it.notes))
         }
         prefs.edit().putString("rel_$projectId", arr.toString()).apply()
     }
 
-    // تسجيل عملية بناء منتهية (مع الحفاظ على الحجم ومسار APK وسبب الفشل المحفوظة سابقًا)
+    // تسجيل عملية بناء منتهية (مع الحفاظ على الحجم والمفتاح والملاحظات المحفوظة سابقًا)
     fun upsertRun(projectId: String, r: GitHubApi.Run) {
         if (r.status != "completed") return
         val old = list(projectId).firstOrNull { it.runId == r.id }
         val rec = ReleaseRecord(
             r.id, r.number, "1.0.${r.number}", r.sha.take(7), r.message,
             old?.sizeBytes ?: 0L, old?.artifactId ?: 0L, r.createdAt, r.conclusion == "success",
-            r.url, old?.apkPath ?: "", old?.failReason ?: ""
+            r.url, old?.apkPath ?: "", old?.failReason ?: "",
+            r.sha, old?.keyFp ?: "", old?.notes ?: ""
         )
         save(projectId, list(projectId).filterNot { it.runId == r.id } + rec)
     }
