@@ -78,7 +78,7 @@ dependencies {
     implementation("androidx.documentfile:documentfile:1.1.0") // اختيار مكان الحفظ
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("com.android.tools.build:apksig:8.5.0") // إعادة توقيع APK بمفتاحك القديم
-    implementation("androidx.work:work-runtime-ktx:2.12.0") // مراقبة البناء وإشعار انتهائه
+    implementation("androidx.work:work-runtime-ktx:2.9.1") // مراقبة البناء وإشعار انتهائه
 
     // عمليات Git (نفس مكتبة MGit)
     implementation("org.eclipse.jgit:org.eclipse.jgit:5.13.3.202401111512-r")
@@ -93,5 +93,5 @@ dependencies {
     implementation("com.google.firebase:firebase-auth")
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-analytics")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }
