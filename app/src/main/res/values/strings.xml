@@ -638,4 +638,28 @@
     <string name="deps_checking">Checking versions online…</string>
     <string name="deps_file">File: %1$s</string>
     <string name="op_deps">Update %1$s</string>
+    <string name="create_repo_title">Create a GitHub repository</string>
+    <string name="create_repo_desc">Creates a new repository in your GitHub account, links this project to it and uploads your files.</string>
+    <string name="create_repo_btn">Create on GitHub</string>
+    <string name="m_create_repo">Create GitHub repository</string>
+    <string name="h_create_repo">Creates a new repository in your GitHub account, links it to this project as origin and can upload your files right away. Shown only for projects without a GitHub address.</string>
+    <string name="repo_name">Repository name</string>
+    <string name="repo_name_fixed">Will be created as: %1$s</string>
+    <string name="repo_invalid_name">Enter an English repository name (letters, numbers, - _ .)</string>
+    <string name="repo_desc">Description (optional)</string>
+    <string name="repo_org">Organization (optional, empty = your account)</string>
+    <string name="repo_private">Private repository</string>
+    <string name="repo_public_note">Public: anyone on the internet can see the code.</string>
+    <string name="repo_sensitive_warn">Warning: this project contains sensitive files (%1$s). Keep it private or remove them first.</string>
+    <string name="repo_readme">Add a README file</string>
+    <string name="repo_push_now">Commit and upload my files now</string>
+    <string name="repo_create_confirm">Create</string>
+    <string name="repo_created">Repository created: %1$s</string>
+    <string name="repo_pushed">Files uploaded to GitHub</string>
+    <string name="repo_push_failed">The repository was created and linked, but the upload failed: %1$s</string>
+    <string name="add_create_switch">Create a new repository on GitHub for this project</string>
+    <string name="gh_err_401">The GitHub token is invalid or expired. Create a new one in Settings.</string>
+    <string name="gh_err_403">The token has no permission for this. It needs the repo scope (fine-grained: Administration, read and write).</string>
+    <string name="gh_err_404">User or organization not found, or the token cannot access it.</string>
+    <string name="gh_err_exists">A repository with this name already exists in this account. Choose another name.</string>
 </resources>

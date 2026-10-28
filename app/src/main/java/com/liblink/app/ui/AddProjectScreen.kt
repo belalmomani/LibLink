@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -20,6 +21,8 @@ import com.liblink.app.R
 import com.liblink.app.data.ProjectRepository
 import com.liblink.app.data.StorageMode
 import com.liblink.app.git.GitManager
+import com.liblink.app.git.RepoCreator
+import com.liblink.app.git.sanitizeRepoName
 import com.liblink.app.storage.ProjectStorage
 import kotlinx.coroutines.launch
 
@@ -40,6 +43,9 @@ fun AddProjectScreen(
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     val access = rememberAccessGranted() // يتحدث عند العودة من إعدادات الصلاحية
+    // إنشاء مستودع جديد على GitHub مع المشروع
+    var createOnGitHub by remember { mutableStateOf(false) }
+    val createState = rememberCreateRepoState("")
 
     // اختيار المجلد الأب في الوضع اليدوي
     val treePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri: Uri? ->
@@ -72,6 +78,10 @@ fun AddProjectScreen(
         }
         val dir = targetDir()
         val cloning = url.isNotBlank()
+        if (createOnGitHub && !cloning) {
+            if (!createState.valid) { message = ctx.getString(R.string.repo_invalid_name); return }
+            if (repo.credentials().token.isBlank()) { message = ctx.getString(R.string.no_credentials); return }
+        }
         if (cloning && !ProjectStorage.isEmptyOrMissing(dir)) {
             message = ctx.getString(R.string.target_not_empty); return
         }
@@ -80,7 +90,16 @@ fun AddProjectScreen(
             try {
                 val gm = GitManager(repo.credentials())
                 if (cloning) gm.clone(url.trim(), dir) else gm.init(dir, "")
-                repo.add(name.trim(), dir.absolutePath, url.trim(), mode)
+                val proj = repo.add(name.trim(), dir.absolutePath, url.trim(), mode)
+                // المشروع المحلي أُنشئ؛ إن فشل إنشاء المستودع يمكنك إعادته من شاشة المشروع
+                if (createOnGitHub && !cloning) {
+                    try {
+                        val r = RepoCreator.create(proj, repo, createState.options())
+                        Toast.makeText(ctx, ctx.getString(R.string.repo_created, r.info.htmlUrl) +
+                            (if (r.pushError != null) "\n" + ctx.getString(R.string.repo_push_failed, r.pushError) else ""),
+                            Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) { Toast.makeText(ctx, ghError(ctx, e), Toast.LENGTH_LONG).show() }
+                }
                 onDone()
             } catch (e: Exception) {
                 message = ctx.getString(R.string.error_prefix, e.message ?: e.toString())
@@ -102,6 +121,18 @@ fun AddProjectScreen(
             OutlinedTextField(url, { url = it }, Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.remote_url)) },
                 supportingText = { Text(stringResource(R.string.remote_url_hint)) })
+
+            // إنشاء مستودع جديد على GitHub بدل ربط مستودع موجود
+            if (url.isBlank()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.add_create_switch), Modifier.weight(1f))
+                    Switch(createOnGitHub, { on ->
+                        createOnGitHub = on
+                        if (on && createState.name.isBlank()) createState.name = sanitizeRepoName(name)
+                    })
+                }
+                if (createOnGitHub) CreateRepoFields(createState, emptyList())
+            }
 
             StepCard(stringResource(R.string.storage_location)) {
                 Row { RadioButton(mode == StorageMode.ORGANIZED, { mode = StorageMode.ORGANIZED })

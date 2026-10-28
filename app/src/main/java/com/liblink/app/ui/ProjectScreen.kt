@@ -17,6 +17,7 @@ import com.liblink.app.R
 import com.liblink.app.data.Project
 import com.liblink.app.data.LibraryRepository
 import com.liblink.app.data.ProjectRepository
+import com.liblink.app.git.RepoCreator
 import com.liblink.app.git.GitManager
 import com.liblink.app.storage.ProjectStorage
 import org.eclipse.jgit.errors.RepositoryNotFoundException
@@ -64,6 +65,9 @@ fun ProjectScreen(
     var menu by remember { mutableStateOf(false) }
     var helpOpen by remember { mutableIntStateOf(0) } // ملاحظة "؟" المفتوحة حاليًا
     var branch by remember { mutableStateOf("") }
+    // إنشاء مستودع GitHub جديد وربطه بالمشروع
+    val createState = rememberCreateRepoState(project.name)
+    var showCreate by remember { mutableStateOf(false) }
 
     // تحديث اسم الفرع بعد كل عملية
     LaunchedEffect(busy) {
@@ -185,6 +189,24 @@ fun ProjectScreen(
         }
     }
 
+    // إنشاء مستودع على GitHub من التطبيق ثم ربطه بالمشروع ورفع الملفات
+    fun doCreateRepo() {
+        if (missingCreds()) return
+        scope.launch {
+            busy = true
+            log = try {
+                val r = RepoCreator.create(project, repo, createState.options())
+                remote = r.info.cloneUrl
+                ctx.getString(R.string.repo_created, r.info.htmlUrl) + when {
+                    r.pushed -> "\n" + ctx.getString(R.string.repo_pushed)
+                    r.pushError != null -> "\n" + ctx.getString(R.string.repo_push_failed, r.pushError)
+                    else -> ""
+                }
+            } catch (e: Exception) { ghError(ctx, e) }
+            busy = false
+        }
+    }
+
     fun doPull() {
         if (!missingCreds()) op { gm -> gm.pull(dir); repo.markUpdated(project.id); ctx.getString(R.string.pull_ok) }
     }
@@ -279,6 +301,7 @@ fun ProjectScreen(
                         MenuItem(R.string.m_rebase, R.string.h_rebase) { dlg = Dlg.Rebase }
                         MenuItem(R.string.m_cherry, R.string.h_cherry) { dlg = Dlg.CherryPick }
                         MenuItem(R.string.m_branches, R.string.h_branches) { onBranches() }
+                        if (remote.isBlank()) MenuItem(R.string.m_create_repo, R.string.h_create_repo) { showCreate = true }
                         MenuItem(R.string.m_doctor, R.string.h_doctor) { onDoctor() }
                         MenuItem(R.string.m_deps, R.string.h_deps) { onDeps() }
                         MenuItem(R.string.m_build_apk, R.string.h_build_apk) { onBuild() }
@@ -321,6 +344,12 @@ fun ProjectScreen(
                 StepCard(stringResource(R.string.repo_broken_title),
                     stringResource(R.string.repo_broken_desc, project.path)) {
                     Button(onClick = { doRepair() }, enabled = !busy) { Text(stringResource(R.string.repair_btn)) }
+                }
+            }
+            // مشروع غير مربوط بـ GitHub: إنشاء مستودع جديد وربطه
+            if (remote.isBlank() && repoOk) {
+                StepCard(stringResource(R.string.create_repo_title), stringResource(R.string.create_repo_desc)) {
+                    Button(onClick = { showCreate = true }, enabled = !busy) { Text(stringResource(R.string.create_repo_btn)) }
                 }
             }
             // آخر عملية على الملفات مع زر التراجع عنها
@@ -400,6 +429,9 @@ fun ProjectScreen(
             }
         }
     }
+
+    if (showCreate) CreateRepoDialog(project, createState,
+        onConfirm = { showCreate = false; doCreateRepo() }, onDismiss = { showCreate = false })
 
     // ---- عرض الحوارات ----
     val close = { dlg = null }

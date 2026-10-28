@@ -23,6 +23,9 @@ class GitHubApi(private val token: String) {
 
     data class Artifact(val id: Long, val name: String, val size: Long, val expired: Boolean, val downloadUrl: String)
 
+    // مستودع أُنشئ على GitHub
+    data class RepoInfo(val fullName: String, val cloneUrl: String, val htmlUrl: String, val defaultBranch: String)
+
     data class FileChange(val name: String, val status: String, val add: Int, val del: Int)
 
     // مقارنة بين commitين: رسائل الـ commits والملفات التي تغيّرت
@@ -48,7 +51,18 @@ class GitHubApi(private val token: String) {
         val code = c.responseCode
         if (code in 200..299 || code == 302) return
         val body = runCatching { c.errorStream?.bufferedReader()?.readText() ?: "" }.getOrDefault("")
-        val msg = runCatching { JSONObject(body).optString("message") }.getOrDefault("")
+        // الرسالة مع تفاصيل errors (مثل: name already exists on this account)
+        val msg = runCatching {
+            val o = JSONObject(body)
+            val sb = StringBuilder(o.optString("message"))
+            val errs = o.optJSONArray("errors")
+            if (errs != null) for (i in 0 until errs.length()) {
+                val e = errs.opt(i)
+                val m = if (e is JSONObject) e.optString("message") else e.toString()
+                if (m.isNotBlank()) sb.append(" — ").append(m)
+            }
+            sb.toString()
+        }.getOrDefault("")
         throw GitHubException(code, msg)
     }
 
@@ -142,6 +156,24 @@ class GitHubApi(private val token: String) {
             }
         )
     }
+
+    // إنشاء مستودع جديد في حسابك (أو في منظمة إن حددتها). يتطلب صلاحية repo للـ Token
+    suspend fun createRepo(name: String, description: String, isPrivate: Boolean, org: String): RepoInfo =
+        withContext(Dispatchers.IO) {
+            val url = if (org.isBlank()) "https://api.github.com/user/repos"
+            else "https://api.github.com/orgs/${org.trim()}/repos"
+            val c = open(url, "POST")
+            try {
+                c.doOutput = true
+                c.setRequestProperty("Content-Type", "application/json")
+                val body = JSONObject().put("name", name).put("private", isPrivate).put("auto_init", false)
+                if (description.isNotBlank()) body.put("description", description)
+                c.outputStream.use { it.write(body.toString().toByteArray()) }
+                check(c)
+                val j = JSONObject(c.inputStream.bufferedReader().readText())
+                RepoInfo(j.optString("full_name"), j.optString("clone_url"), j.optString("html_url"), j.optString("default_branch", "main"))
+            } finally { c.disconnect() }
+        }
 
     suspend fun jobs(owner: String, repo: String, runId: Long): List<Job> = withContext(Dispatchers.IO) {
         val j = getJson("https://api.github.com/repos/$owner/$repo/actions/runs/$runId/jobs")

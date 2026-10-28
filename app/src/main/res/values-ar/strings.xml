@@ -638,4 +638,28 @@
     <string name="deps_checking">جارٍ فحص الإصدارات على الإنترنت…</string>
     <string name="deps_file">الملف: %1$s</string>
     <string name="op_deps">تحديث %1$s</string>
+    <string name="create_repo_title">إنشاء مستودع على GitHub</string>
+    <string name="create_repo_desc">ينشئ مستودعًا جديدًا في حسابك على GitHub ويربط هذا المشروع به ويرفع ملفاتك.</string>
+    <string name="create_repo_btn">إنشاء على GitHub</string>
+    <string name="m_create_repo">إنشاء مستودع على GitHub</string>
+    <string name="h_create_repo">ينشئ مستودعًا جديدًا في حسابك على GitHub ويربطه بهذا المشروع كـ origin ويمكنه رفع ملفاتك فورًا. يظهر فقط للمشاريع التي بلا عنوان GitHub.</string>
+    <string name="repo_name">اسم المستودع</string>
+    <string name="repo_name_fixed">سيُنشأ باسم: %1$s</string>
+    <string name="repo_invalid_name">اكتب اسم مستودع بالإنجليزية (حروف وأرقام و - _ .)</string>
+    <string name="repo_desc">الوصف (اختياري)</string>
+    <string name="repo_org">المنظمة (اختياري، فارغ = حسابك)</string>
+    <string name="repo_private">مستودع خاص</string>
+    <string name="repo_public_note">عام: أي شخص على الإنترنت يستطيع رؤية الكود.</string>
+    <string name="repo_sensitive_warn">تحذير: يحتوي هذا المشروع ملفات حساسة (%1$s). أبقِه خاصًا أو أزلها أولًا.</string>
+    <string name="repo_readme">إضافة ملف README</string>
+    <string name="repo_push_now">حفظ ورفع ملفاتي الآن</string>
+    <string name="repo_create_confirm">إنشاء</string>
+    <string name="repo_created">تم إنشاء المستودع: %1$s</string>
+    <string name="repo_pushed">تم رفع الملفات إلى GitHub</string>
+    <string name="repo_push_failed">أُنشئ المستودع وربط بالمشروع لكن فشل الرفع: %1$s</string>
+    <string name="add_create_switch">إنشاء مستودع جديد على GitHub لهذا المشروع</string>
+    <string name="gh_err_401">الـ Token غير صالح أو منتهي. أنشئ واحدًا جديدًا من الإعدادات.</string>
+    <string name="gh_err_403">لا يملك الـ Token الصلاحية لهذا. يحتاج صلاحية repo (للـ fine-grained: Administration قراءة وكتابة).</string>
+    <string name="gh_err_404">المستخدم أو المنظمة غير موجودة، أو لا يستطيع الـ Token الوصول إليها.</string>
+    <string name="gh_err_exists">يوجد مستودع بهذا الاسم في الحساب. اختر اسمًا آخر.</string>
 </resources>
