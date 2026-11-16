@@ -24,6 +24,7 @@ sealed interface Screen {
     data class Library(val share: String? = null) : Screen
     object Settings : Screen
     object Accounts : Screen
+    object AllRepos : Screen
     data class AccountRepos(val user: String) : Screen
     data class Trash(val from: Screen) : Screen
     data class Project(val id: String) : Screen
@@ -97,6 +98,7 @@ fun LibLinkRoot(
             is Screen.Trash -> s.from
             is Screen.Accounts -> Screen.Settings
             is Screen.AccountRepos -> Screen.Accounts
+            is Screen.AllRepos -> Screen.Accounts
             else -> Screen.Home
         }
     }
@@ -122,7 +124,10 @@ fun LibLinkRoot(
             onTrash = { screen = Screen.Trash(Screen.Settings) },
             onAccounts = { screen = Screen.Accounts })
         Screen.Accounts -> AccountsScreen(repo, onBack = { screen = Screen.Settings },
-            onRepos = { screen = Screen.AccountRepos(it) })
+            onRepos = { screen = Screen.AccountRepos(it) },
+            onAll = { screen = Screen.AllRepos })
+        Screen.AllRepos -> AllReposScreen(repo, onBack = { screen = Screen.Accounts },
+            onClone = { u, url, name -> repo.switchAccount(u); screen = Screen.Add(url, name) })
         is Screen.AccountRepos -> AccountReposScreen(repo, s.user, onBack = { screen = Screen.Accounts },
             onClone = { url, name -> repo.switchAccount(s.user); screen = Screen.Add(url, name) })
         is Screen.Trash -> TrashScreen(onBack = { screen = s.from })

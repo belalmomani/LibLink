@@ -1,5 +1,6 @@
 package com.liblink.app.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,11 +20,14 @@ import com.liblink.app.R
 import com.liblink.app.data.Credentials
 import com.liblink.app.data.ProjectRepository
 import com.liblink.app.network.GitHubApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 // إدارة عدة حسابات GitHub: إضافة، تبديل الحساب النشط، إزالة، وتصفح مستودعات كل حساب
 @Composable
-fun AccountsScreen(repo: ProjectRepository, onBack: () -> Unit, onRepos: (String) -> Unit) {
+fun AccountsScreen(repo: ProjectRepository, onBack: () -> Unit, onRepos: (String) -> Unit, onAll: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var tick by remember { mutableIntStateOf(0) }
@@ -44,6 +48,11 @@ fun AccountsScreen(repo: ProjectRepository, onBack: () -> Unit, onRepos: (String
             Modifier.padding(pad).padding(16.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (accounts.size > 1) StepCard(stringResource(R.string.acc_all_title)) {
+                Text(stringResource(R.string.acc_all_hint), style = MaterialTheme.typography.bodySmall)
+                Button(onClick = onAll) { Text(stringResource(R.string.acc_all_btn)) }
+            }
+
             accounts.forEach { a ->
                 val isActive = a.user.equals(active, true)
                 StepCard(a.user + if (isActive) "  ●  " + stringResource(R.string.acc_active) else "") {
@@ -151,6 +160,72 @@ fun AccountReposScreen(repo: ProjectRepository, user: String, onBack: () -> Unit
                                 if (r.description.isNotBlank()) Text(r.description, style = MaterialTheme.typography.bodySmall)
                                 Text(stringResource(R.string.acc_clone_hint), style = MaterialTheme.typography.bodySmall)
                                 Button(onClick = { onClone(r.cloneUrl, r.name) }) { Text(stringResource(R.string.acc_clone_btn)) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// مستودعات كل الحسابات معًا في قائمة واحدة (قراءة فقط) مع بحث وتصفية بالحساب
+@Composable
+fun AllReposScreen(repo: ProjectRepository, onBack: () -> Unit, onClone: (user: String, url: String, name: String) -> Unit) {
+    val ctx = LocalContext.current
+    val accounts = remember { repo.accounts() }
+    var items by remember { mutableStateOf<List<Pair<String, GitHubApi.RepoItem>>?>(null) }
+    var errors by remember { mutableStateOf<List<String>>(emptyList()) }
+    var query by remember { mutableStateOf("") }
+    var only by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        val errs = ArrayList<String>()
+        val all = coroutineScope {
+            accounts.map { a ->
+                async {
+                    try { GitHubApi(a.token).repos().map { a.user to it } }
+                    catch (e: Exception) { synchronized(errs) { errs.add(a.user + ": " + ghError(ctx, e)) }; emptyList() }
+                }
+            }.awaitAll().flatten()
+        }
+        errors = errs
+        items = all.sortedByDescending { it.second.updatedAt }
+    }
+    val shown = remember(items, query, only) {
+        items.orEmpty().filter {
+            (only == null || it.first == only) && (query.isBlank() || it.second.fullName.contains(query.trim(), true))
+        }
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = { AppBar(stringResource(R.string.acc_all_title), onBack) }
+    ) { pad ->
+        Column(Modifier.padding(pad).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.acc_search)) }, singleLine = true)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(selected = only == null, onClick = { only = null }, label = { Text(stringResource(R.string.acc_all_chip)) })
+                accounts.forEach { a ->
+                    FilterChip(selected = only == a.user, onClick = { only = if (only == a.user) null else a.user }, label = { Text(a.user) })
+                }
+            }
+            if (items == null) {
+                Text(stringResource(R.string.acc_loading)); Busy(true)
+            } else {
+                errors.forEach { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                Text(stringResource(R.string.acc_repos_count, shown.size), style = MaterialTheme.typography.bodySmall)
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(bottom = 16.dp)) {
+                    items(shown, key = { it.first + "/" + it.second.fullName }) { (user, r) ->
+                        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(r.fullName, style = MaterialTheme.typography.titleMedium)
+                                Text(user + " · " + stringResource(if (r.isPrivate) R.string.acc_private else R.string.acc_public),
+                                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                                if (r.description.isNotBlank()) Text(r.description, style = MaterialTheme.typography.bodySmall)
+                                Text(stringResource(R.string.acc_clone_hint), style = MaterialTheme.typography.bodySmall)
+                                Button(onClick = { onClone(user, r.cloneUrl, r.name) }) { Text(stringResource(R.string.acc_clone_btn)) }
                             }
                         }
                     }

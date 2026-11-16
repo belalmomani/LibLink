@@ -692,4 +692,8 @@
     <string name="acc_public">Public</string>
     <string name="acc_empty">No repositories found for this account.</string>
     <string name="acc_loading">Loading...</string>
+    <string name="acc_all_title">All accounts together</string>
+    <string name="acc_all_hint">Loads the repositories of every added account into one list. Read-only, changes nothing.</string>
+    <string name="acc_all_btn">Show all repositories</string>
+    <string name="acc_all_chip">All</string>
 </resources>

@@ -692,4 +692,8 @@
     <string name="acc_public">عام</string>
     <string name="acc_empty">لا توجد مستودعات لهذا الحساب.</string>
     <string name="acc_loading">جارٍ التحميل...</string>
+    <string name="acc_all_title">كل الحسابات معًا</string>
+    <string name="acc_all_hint">يجلب مستودعات كل الحسابات المضافة في قائمة واحدة. للقراءة فقط ولا يغيّر شيئًا.</string>
+    <string name="acc_all_btn">عرض كل المستودعات</string>
+    <string name="acc_all_chip">الكل</string>
 </resources>
